@@ -160,6 +160,15 @@ export default function InventarioPage() {
     XLSX.writeFile(wb, "inventario_distrimas.xlsx")
   }
 
+  function descargarPlantilla() {
+    const ejemplo = [{ Codigo: "0043", Nombre: "BIG BOM BABY CARITA FELIZ X48", Grupo: "001", Precio: 7600, Stock: 105 }]
+    const ws = XLSX.utils.json_to_sheet(ejemplo)
+    ws["!cols"] = [{ wch: 10 }, { wch: 36 }, { wch: 8 }, { wch: 12 }, { wch: 10 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario")
+    XLSX.writeFile(wb, "plantilla_inventario.xlsx")
+  }
+
   const stockBajo = productos.filter(p => p.activo && p.stock < p.stock_minimo).length
 
   const filtrados = productos.filter(p => {
@@ -183,6 +192,7 @@ export default function InventarioPage() {
         </div>
         <div className="page-header-btns">
           <button onClick={exportarExcel} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Exportar Excel</button>
+          <button onClick={descargarPlantilla} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Descargar plantilla</button>
           <button onClick={() => abrir()} style={{ padding: "10px 20px", background: "#D72638", color: "white", fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer" }}>+ Producto</button>
         </div>
       </div>
