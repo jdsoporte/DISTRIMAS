@@ -5,7 +5,7 @@ import { Cliente } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Cliente> = { codigo: "", nombre: "", municipio: "", barrio: "", direccion: "", telefono: "", activo: true }
+const EMPTY: Partial<Cliente> = { codigo: "", nit: "", nombre: "", razon_social: "", municipio: "", barrio: "", direccion: "", telefono: "", activo: true }
 
 export default function ClientesPage() {
   const theme = useTheme()
@@ -33,7 +33,7 @@ export default function ClientesPage() {
   function abrir(c?: Cliente) {
     setError("")
     setEditando(c ? c.id : null)
-    setForm(c ? { codigo: c.codigo, nombre: c.nombre, municipio: c.municipio, barrio: c.barrio, direccion: c.direccion, telefono: c.telefono, activo: c.activo } : { ...EMPTY })
+    setForm(c ? { codigo: c.codigo, nit: c.nit, nombre: c.nombre, razon_social: c.razon_social, municipio: c.municipio, barrio: c.barrio, direccion: c.direccion, telefono: c.telefono, activo: c.activo } : { ...EMPTY })
     setModal(true)
   }
 
@@ -64,15 +64,28 @@ export default function ClientesPage() {
     const wb = XLSX.read(data)
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws)
-    const registros = rows.map(r => ({
-      codigo: String(r["codigo"] || r["Codigo"] || r["CODIGO"] || "").trim(),
-      nombre: String(r["nombre"] || r["Nombre"] || r["NOMBRE"] || "").trim(),
-      municipio: String(r["municipio"] || r["Municipio"] || r["MUNICIPIO"] || "").trim(),
-      barrio: String(r["barrio"] || r["Barrio"] || r["BARRIO"] || "").trim(),
-      direccion: String(r["direccion"] || r["Direccion"] || r["DIRECCION"] || "").trim(),
-      telefono: String(r["telefono"] || r["Telefono"] || r["TELEFONO"] || "").trim(),
-      activo: true,
-    })).filter(r => r.nombre)
+    const val = (r: Record<string, string>, ...keys: string[]) => {
+      for (const k of keys) {
+        const found = Object.keys(r).find(c => c.trim().toLowerCase() === k.toLowerCase())
+        if (found && String(r[found]).trim()) return String(r[found]).trim()
+      }
+      return ""
+    }
+    const registros = rows.map(r => {
+      const tel = val(r, "TELEFON", "TELEFONO", "telefono")
+      const cel = val(r, "CELULAR", "celular")
+      return {
+        codigo: val(r, "CODIGI", "CODIGO", "codigo"),
+        nit: val(r, "NIT_CC", "NIT", "nit"),
+        nombre: val(r, "NOMBRE_CLIENTE", "NOMBRE", "nombre"),
+        razon_social: val(r, "RAZON_SOCIAL", "razon_social"),
+        municipio: val(r, "CIUDAD", "MUNICIPIO", "municipio"),
+        barrio: val(r, "BARRIO", "barrio"),
+        direccion: val(r, "DIRECCION", "direccion"),
+        telefono: [tel, cel].filter(Boolean).join(" / "),
+        activo: true,
+      }
+    }).filter(r => (r.nombre || r.razon_social) && r.codigo)
     if (registros.length === 0) { setMsgImport("No se encontraron registros válidos."); setImportando(false); return }
     const { error: err } = await supabase.from("clientes").upsert(registros, { onConflict: "codigo" })
     setImportando(false)
@@ -83,7 +96,7 @@ export default function ClientesPage() {
   }
 
   function exportarExcel() {
-    const datos = clientes.map(c => ({ Codigo: c.codigo, Nombre: c.nombre, Municipio: c.municipio, Barrio: c.barrio, Direccion: c.direccion, Telefono: c.telefono, Activo: c.activo ? "Sí" : "No" }))
+    const datos = clientes.map(c => ({ Codigo: c.codigo, NIT_CC: c.nit, Nombre: c.nombre, Razon_social: c.razon_social, Municipio: c.municipio, Barrio: c.barrio, Direccion: c.direccion, Telefono: c.telefono, Activo: c.activo ? "Sí" : "No" }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Clientes")
@@ -92,7 +105,9 @@ export default function ClientesPage() {
 
   const filtrados = clientes.filter(c =>
     c.nombre.toLowerCase().includes(buscar.toLowerCase()) ||
+    (c.razon_social || "").toLowerCase().includes(buscar.toLowerCase()) ||
     c.codigo.toLowerCase().includes(buscar.toLowerCase()) ||
+    (c.nit || "").toLowerCase().includes(buscar.toLowerCase()) ||
     c.municipio.toLowerCase().includes(buscar.toLowerCase())
   )
 
@@ -136,20 +151,22 @@ export default function ClientesPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "Nombre", "Municipio", "Barrio", "Teléfono", "Estado", "Acciones"].map(h => (
+                {["Código", "NIT/CC", "Nombre", "Razón social", "Municipio", "Barrio", "Teléfono", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
+                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay clientes</td></tr>
+                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay clientes</td></tr>
               ) : filtrados.map(c => (
                 <tr key={c.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{c.codigo}</td>
+                  <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{c.nit}</td>
                   <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 500, color: theme.text }}>{c.nombre}</td>
+                  <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.razon_social}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.municipio}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.barrio}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.telefono}</td>
@@ -179,16 +196,18 @@ export default function ClientesPage() {
             <h3 style={{ fontSize: "17px", fontWeight: "bold", margin: "0 0 20px", color: theme.text }}>{editando ? "Editar cliente" : "Nuevo cliente"}</h3>
             {error && <div style={{ background: "rgba(215,38,56,0.1)", border: "1px solid rgba(215,38,56,0.25)", color: "#D72638", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
             <div style={{ display: "grid", gap: "14px" }}>
-              <div className="form-grid-1-2">
-                <div><label style={lbl}>Código</label><input style={inp} value={form.codigo} onChange={e => f("codigo", e.target.value)} placeholder="CLI-001" /></div>
-                <div><label style={lbl}>Nombre</label><input style={inp} value={form.nombre} onChange={e => f("nombre", e.target.value)} placeholder="Tienda El Paisa" /></div>
-              </div>
               <div className="form-grid-2">
-                <div><label style={lbl}>Municipio</label><input style={inp} value={form.municipio} onChange={e => f("municipio", e.target.value)} placeholder="Bucaramanga" /></div>
-                <div><label style={lbl}>Barrio</label><input style={inp} value={form.barrio} onChange={e => f("barrio", e.target.value)} placeholder="La Concordia" /></div>
+                <div><label style={lbl}>Código</label><input style={inp} value={form.codigo} onChange={e => f("codigo", e.target.value)} placeholder="8214" /></div>
+                <div><label style={lbl}>NIT / CC</label><input style={inp} value={form.nit} onChange={e => f("nit", e.target.value)} placeholder="1007758571" /></div>
               </div>
-              <div><label style={lbl}>Dirección</label><input style={inp} value={form.direccion} onChange={e => f("direccion", e.target.value)} placeholder="Cra 15 # 23-10" /></div>
-              <div><label style={lbl}>Teléfono</label><input style={inp} value={form.telefono} onChange={e => f("telefono", e.target.value)} placeholder="315..." /></div>
+              <div><label style={lbl}>Nombre</label><input style={inp} value={form.nombre} onChange={e => f("nombre", e.target.value)} placeholder="Ana Veronica Lopez" /></div>
+              <div><label style={lbl}>Razón social</label><input style={inp} value={form.razon_social} onChange={e => f("razon_social", e.target.value)} placeholder="Fantasias VMAJO" /></div>
+              <div className="form-grid-2">
+                <div><label style={lbl}>Municipio</label><input style={inp} value={form.municipio} onChange={e => f("municipio", e.target.value)} placeholder="Medellin" /></div>
+                <div><label style={lbl}>Barrio</label><input style={inp} value={form.barrio} onChange={e => f("barrio", e.target.value)} placeholder="El Hueco" /></div>
+              </div>
+              <div><label style={lbl}>Dirección</label><input style={inp} value={form.direccion} onChange={e => f("direccion", e.target.value)} placeholder="CR 46 # 49 67" /></div>
+              <div><label style={lbl}>Teléfono</label><input style={inp} value={form.telefono} onChange={e => f("telefono", e.target.value)} placeholder="3104167730" /></div>
               <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", cursor: "pointer", color: theme.text }}>
                 <input type="checkbox" checked={form.activo} onChange={e => f("activo", e.target.checked)} /> Activo
               </label>
