@@ -103,6 +103,15 @@ export default function ClientesPage() {
     XLSX.writeFile(wb, "clientes_distrimas.xlsx")
   }
 
+  function descargarPlantilla() {
+    const ejemplo = [{ Codigo: "8214", NIT_CC: "1007758571", Nombre: "ANA VERONICA LOPEZ DUQUE", Razon_social: "FANTASIAS VMAJO", Municipio: "MEDELLIN", Barrio: "EL HUECO", Direccion: "CR 46 # 49 67", Telefono: "3104167730" }]
+    const ws = XLSX.utils.json_to_sheet(ejemplo)
+    ws["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 32 }, { wch: 16 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Clientes")
+    XLSX.writeFile(wb, "plantilla_clientes.xlsx")
+  }
+
   const filtrados = clientes.filter(c =>
     c.nombre.toLowerCase().includes(buscar.toLowerCase()) ||
     (c.razon_social || "").toLowerCase().includes(buscar.toLowerCase()) ||
@@ -125,6 +134,9 @@ export default function ClientesPage() {
         <div className="page-header-btns">
           <button onClick={exportarExcel} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>
             Exportar Excel
+          </button>
+          <button onClick={descargarPlantilla} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>
+            Descargar plantilla
           </button>
           <label style={{ padding: "10px 16px", background: "rgba(34,197,94,0.12)", color: "#22c55e", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer", display: "inline-block" }}>
             {importando ? "Importando..." : "Importar Excel"}
