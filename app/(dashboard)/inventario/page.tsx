@@ -8,7 +8,7 @@ import * as XLSX from "xlsx"
 
 const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", activo: true }
 
-interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number }
+interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number; avisos: string[] }
 
 export default function InventarioPage() {
   const theme = useTheme()
@@ -99,21 +99,58 @@ export default function InventarioPage() {
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
 
+    // Validacion: archivo sin filas
+    if (rows.length === 0) {
+      setProcesando(false)
+      setImportError("El archivo esta vacio o no tiene datos en la primera hoja. Revisa el archivo y vuelve a intentar.")
+      return
+    }
+
     const col = (r: Record<string, unknown>, ...keys: string[]) => {
       for (const k of keys) if (r[k] !== undefined && r[k] !== null && r[k] !== "") return r[k]
       return undefined
     }
 
-    const filas = rows.map(r => ({
-      codigo:       String(col(r, "codigo", "Codigo", "CODIGO") ?? "").trim(),
-      nombre:       String(col(r, "nombre", "Nombre", "NOMBRE", "articulo", "Articulo", "ARTICULO") ?? "").trim(),
-      descripcion:  String(col(r, "descripcion", "Descripcion", "DESCRIPCION") ?? "").trim(),
-      unidad:       String(col(r, "unidad", "Unidad", "UNIDAD") ?? "Und").trim(),
-      precio:       Number(col(r, "precio", "Precio", "PRECIO", "pv1_mn", "Pv1_mn", "PV1_MN") ?? 0),
-      stock:        Number(col(r, "stock", "Stock", "STOCK", "can_mn", "Can_mn", "CAN_MN") ?? 0),
-      stock_minimo: Number(col(r, "stock_minimo", "StockMinimo", "STOCK_MINIMO") ?? 10),
-      grupo:        String(col(r, "grupo", "Grupo", "GRUPO", "gru", "Gru", "GRU") ?? "").trim(),
-    }))
+    const filas = rows.map((r, idx) => {
+      const precioRaw = col(r, "precio", "Precio", "PRECIO", "pv1_mn", "Pv1_mn", "PV1_MN")
+      const stockRaw  = col(r, "stock", "Stock", "STOCK", "can_mn", "Can_mn", "CAN_MN")
+      return {
+        excelFila:    idx + 2,
+        codigo:       String(col(r, "codigo", "Codigo", "CODIGO") ?? "").trim(),
+        nombre:       String(col(r, "nombre", "Nombre", "NOMBRE", "articulo", "Articulo", "ARTICULO") ?? "").trim(),
+        descripcion:  String(col(r, "descripcion", "Descripcion", "DESCRIPCION") ?? "").trim(),
+        unidad:       String(col(r, "unidad", "Unidad", "UNIDAD") ?? "Und").trim(),
+        precio:       Number(precioRaw ?? 0),
+        stock:        Number(stockRaw ?? 0),
+        stock_minimo: Number(col(r, "stock_minimo", "StockMinimo", "STOCK_MINIMO") ?? 10),
+        grupo:        String(col(r, "grupo", "Grupo", "GRUPO", "gru", "Gru", "GRU") ?? "").trim(),
+        precioInvalido: precioRaw !== undefined && isNaN(Number(precioRaw)),
+        stockInvalido:  stockRaw !== undefined && isNaN(Number(stockRaw)),
+      }
+    })
+
+    // Validacion: ninguna fila tiene codigo -> columna codigo ausente o mal nombrada
+    if (filas.every(f => !f.codigo)) {
+      setProcesando(false)
+      setImportError("No se encontro la columna de codigo. Asegurate de que el archivo tenga una columna llamada CODIGO en la primera fila.")
+      return
+    }
+
+    // Avisos previos (no detienen la importacion, solo informan)
+    const avisos: string[] = []
+    const sinCodigo = filas.filter(f => !f.codigo).map(f => f.excelFila)
+    if (sinCodigo.length > 0)
+      avisos.push(`${sinCodigo.length} fila(s) sin codigo fueron omitidas (fila ${sinCodigo.slice(0, 8).join(", ")}${sinCodigo.length > 8 ? "..." : ""}).`)
+    const precioMalo = filas.filter(f => f.codigo && f.precioInvalido).map(f => f.excelFila)
+    if (precioMalo.length > 0)
+      avisos.push(`${precioMalo.length} producto(s) con precio invalido se guardaron en 0 (fila ${precioMalo.slice(0, 8).join(", ")}${precioMalo.length > 8 ? "..." : ""}).`)
+    const stockMalo = filas.filter(f => f.codigo && f.stockInvalido).map(f => f.excelFila)
+    if (stockMalo.length > 0)
+      avisos.push(`${stockMalo.length} producto(s) con cantidad invalida se guardaron en 0 (fila ${stockMalo.slice(0, 8).join(", ")}${stockMalo.length > 8 ? "..." : ""}).`)
+    const validas = filas.filter(f => f.codigo)
+    const codigosDuplicados = validas.map(f => f.codigo).filter((c, i, arr) => arr.indexOf(c) !== i)
+    if (codigosDuplicados.length > 0)
+      avisos.push(`Hay codigos repetidos en el archivo (${[...new Set(codigosDuplicados)].slice(0, 8).join(", ")}). Se uso el ultimo valor de cada uno.`)
 
     const LOTE = 20
     let nuevos = 0, actualizados = 0, errores = 0
@@ -124,21 +161,23 @@ export default function InventarioPage() {
 
       for (const fila of lote) {
         if (!fila.codigo) { errores++; continue }
+        const precio = isNaN(fila.precio) ? 0 : fila.precio
+        const stock = isNaN(fila.stock) ? 0 : fila.stock
 
         const { data: existe } = await supabase
           .from("productos").select("id").eq("codigo", fila.codigo).maybeSingle()
 
         if (existe) {
           const { error: err } = await supabase.from("productos")
-            .update({ stock: fila.stock, precio: fila.precio, grupo: fila.grupo, updated_at: new Date().toISOString() })
+            .update({ stock, precio, grupo: fila.grupo, updated_at: new Date().toISOString() })
             .eq("codigo", fila.codigo)
           if (err) errores++; else actualizados++
         } else {
           const { error: err } = await supabase.from("productos").insert({
             codigo: fila.codigo, nombre: fila.nombre || fila.codigo,
             descripcion: fila.descripcion, unidad: fila.unidad || "Und",
-            precio: fila.precio, stock: fila.stock,
-            stock_minimo: fila.stock_minimo || 10, grupo: fila.grupo, activo: true,
+            precio, stock,
+            stock_minimo: isNaN(fila.stock_minimo) ? 10 : (fila.stock_minimo || 10), grupo: fila.grupo, activo: true,
           })
           if (err) errores++; else nuevos++
         }
@@ -148,7 +187,7 @@ export default function InventarioPage() {
     }
 
     setProcesando(false)
-    setResumen({ nuevos, actualizados, errores, total })
+    setResumen({ nuevos, actualizados, errores, total, avisos })
     load()
   }
 
@@ -161,9 +200,9 @@ export default function InventarioPage() {
   }
 
   function descargarPlantilla() {
-    const ejemplo = [{ Codigo: "0043", Nombre: "BIG BOM BABY CARITA FELIZ X48", Grupo: "001", Precio: 7600, Stock: 105 }]
+    const ejemplo = [{ CODIGO: "0043", ARTICULO: "BIG BOM BABY CARITA FELIZ X48", GRU: "001", CAN_MN: 105, PV1_MN: 7600 }]
     const ws = XLSX.utils.json_to_sheet(ejemplo)
-    ws["!cols"] = [{ wch: 10 }, { wch: 36 }, { wch: 8 }, { wch: 12 }, { wch: 10 }]
+    ws["!cols"] = [{ wch: 10 }, { wch: 36 }, { wch: 8 }, { wch: 10 }, { wch: 12 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Inventario")
     XLSX.writeFile(wb, "plantilla_inventario.xlsx")
@@ -318,6 +357,15 @@ export default function InventarioPage() {
                   <p style={{ fontSize: "11px", color: theme.muted, margin: 0, fontWeight: 600 }}>Total filas</p>
                 </div>
               </div>
+
+              {resumen.avisos.length > 0 && (
+                <div style={{ padding: "12px 14px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: "10px", marginBottom: "12px" }}>
+                  <p style={{ fontSize: "12px", fontWeight: 700, color: "#f59e0b", margin: "0 0 6px" }}>Avisos de validación</p>
+                  {resumen.avisos.map((a, idx) => (
+                    <p key={idx} style={{ fontSize: "12px", color: theme.muted, margin: "0 0 4px", lineHeight: 1.4 }}>• {a}</p>
+                  ))}
+                </div>
+              )}
 
               <button onClick={limpiarImport} style={{ width: "100%", padding: "10px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "10px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>
                 Nueva importación
