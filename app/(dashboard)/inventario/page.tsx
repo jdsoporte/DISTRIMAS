@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme-context"
 import { getSession } from "@/lib/auth"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, activo: true }
+const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", activo: true }
 
 interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number }
 
@@ -106,12 +106,13 @@ export default function InventarioPage() {
 
     const filas = rows.map(r => ({
       codigo:       String(col(r, "codigo", "Codigo", "CODIGO") ?? "").trim(),
-      nombre:       String(col(r, "nombre", "Nombre", "NOMBRE") ?? "").trim(),
+      nombre:       String(col(r, "nombre", "Nombre", "NOMBRE", "articulo", "Articulo", "ARTICULO") ?? "").trim(),
       descripcion:  String(col(r, "descripcion", "Descripcion", "DESCRIPCION") ?? "").trim(),
       unidad:       String(col(r, "unidad", "Unidad", "UNIDAD") ?? "Und").trim(),
-      precio:       Number(col(r, "precio", "Precio", "PRECIO") ?? 0),
-      stock:        Number(col(r, "stock", "Stock", "STOCK") ?? 0),
+      precio:       Number(col(r, "precio", "Precio", "PRECIO", "pv1_mn", "Pv1_mn", "PV1_MN") ?? 0),
+      stock:        Number(col(r, "stock", "Stock", "STOCK", "can_mn", "Can_mn", "CAN_MN") ?? 0),
       stock_minimo: Number(col(r, "stock_minimo", "StockMinimo", "STOCK_MINIMO") ?? 10),
+      grupo:        String(col(r, "grupo", "Grupo", "GRUPO", "gru", "Gru", "GRU") ?? "").trim(),
     }))
 
     const LOTE = 20
@@ -129,7 +130,7 @@ export default function InventarioPage() {
 
         if (existe) {
           const { error: err } = await supabase.from("productos")
-            .update({ stock: fila.stock, precio: fila.precio, updated_at: new Date().toISOString() })
+            .update({ stock: fila.stock, precio: fila.precio, grupo: fila.grupo, updated_at: new Date().toISOString() })
             .eq("codigo", fila.codigo)
           if (err) errores++; else actualizados++
         } else {
@@ -137,7 +138,7 @@ export default function InventarioPage() {
             codigo: fila.codigo, nombre: fila.nombre || fila.codigo,
             descripcion: fila.descripcion, unidad: fila.unidad || "Und",
             precio: fila.precio, stock: fila.stock,
-            stock_minimo: fila.stock_minimo || 10, activo: true,
+            stock_minimo: fila.stock_minimo || 10, grupo: fila.grupo, activo: true,
           })
           if (err) errores++; else nuevos++
         }
@@ -152,7 +153,7 @@ export default function InventarioPage() {
   }
 
   function exportarExcel() {
-    const datos = productos.map(p => ({ Codigo: p.codigo, Nombre: p.nombre, Descripcion: p.descripcion, Unidad: p.unidad, Precio: p.precio, Stock: p.stock, StockMinimo: p.stock_minimo, Activo: p.activo ? "Sí" : "No" }))
+    const datos = productos.map(p => ({ Codigo: p.codigo, Nombre: p.nombre, Grupo: p.grupo, Descripcion: p.descripcion, Unidad: p.unidad, Precio: p.precio, Stock: p.stock, StockMinimo: p.stock_minimo, Activo: p.activo ? "Sí" : "No" }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Inventario")
@@ -343,22 +344,23 @@ export default function InventarioPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "Nombre", "Unidad", "Precio", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
+                {["Código", "Nombre", "Grupo", "Unidad", "Precio", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
+                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
+                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
               ) : filtrados.map(p => {
                 const bajo = p.activo && p.stock < p.stock_minimo
                 return (
                   <tr key={p.id} style={{ borderBottom: `1px solid ${theme.border}`, background: bajo ? "rgba(245,158,11,0.04)" : "transparent" }}>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{p.codigo}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 500, color: theme.text }}>{p.nombre}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{p.grupo}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{p.unidad}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 600, color: theme.text }}>${p.precio.toLocaleString("es-CO")}</td>
                     <td style={{ padding: "12px 16px" }}>
@@ -397,6 +399,7 @@ export default function InventarioPage() {
                 <div><label style={lbl}>Nombre</label><input style={inp} value={form.nombre} onChange={e => f("nombre", e.target.value)} placeholder="Arroz Diana 5kg" /></div>
               </div>
               <div><label style={lbl}>Descripción</label><input style={inp} value={form.descripcion} onChange={e => f("descripcion", e.target.value)} placeholder="Descripción del producto" /></div>
+              <div><label style={lbl}>Grupo</label><input style={inp} value={form.grupo} onChange={e => f("grupo", e.target.value)} placeholder="001" /></div>
               <div className="form-grid-3">
                 <div><label style={lbl}>Unidad</label>
                   <select style={inp} value={form.unidad} onChange={e => f("unidad", e.target.value)}>
