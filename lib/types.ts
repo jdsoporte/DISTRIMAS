@@ -1,4 +1,4 @@
-﻿export interface AccionesModulo {
+export interface AccionesModulo {
   ver: boolean
   insertar: boolean
   actualizar: boolean
@@ -37,7 +37,9 @@ export interface Usuario {
 export interface Cliente {
   id: string
   codigo: string
+  nit: string
   nombre: string
+  razon_social: string
   municipio: string
   barrio: string
   direccion: string
