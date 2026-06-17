@@ -42,8 +42,19 @@ export default function InventarioPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from("productos").select("*").order("nombre")
-    setProductos(data || [])
+    const TAM = 1000
+    let desde = 0
+    let todos: Producto[] = []
+    while (true) {
+      const { data, error } = await supabase
+        .from("productos").select("*").order("nombre")
+        .range(desde, desde + TAM - 1)
+      if (error || !data || data.length === 0) break
+      todos = todos.concat(data)
+      if (data.length < TAM) break
+      desde += TAM
+    }
+    setProductos(todos)
     setLoading(false)
   }
 
