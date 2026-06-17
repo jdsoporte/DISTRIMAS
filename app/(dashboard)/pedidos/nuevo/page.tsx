@@ -32,11 +32,27 @@ export default function NuevoPedidoPage() {
   const [showProductos, setShowProductos] = useState(false)
 
   useEffect(() => {
-    supabase.from("clientes").select("*").eq("activo", true).order("nombre").then(r => setClientes(r.data || []))
-    supabase.from("productos").select("*").eq("activo", true).order("nombre").then(r => setProductos(r.data || []))
+    cargarTodo("clientes").then(setClientes)
+    cargarTodo("productos").then(setProductos)
     supabase.from("configuraciones").select("whatsapp_numero,nombre_empresa").limit(1).single().then(r => setConfig(r.data))
     if (pedidoId) cargarPedido(pedidoId)
   }, [])
+
+  async function cargarTodo(tabla: "clientes" | "productos") {
+    const TAM = 1000
+    let desde = 0
+    let todos: any[] = []
+    while (true) {
+      const { data, error } = await supabase
+        .from(tabla).select("*").eq("activo", true).order("nombre")
+        .range(desde, desde + TAM - 1)
+      if (error || !data || data.length === 0) break
+      todos = todos.concat(data)
+      if (data.length < TAM) break
+      desde += TAM
+    }
+    return todos
+  }
 
   async function cargarPedido(id: string) {
     const { data } = await supabase
