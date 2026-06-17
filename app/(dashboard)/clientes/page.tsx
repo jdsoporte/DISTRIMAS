@@ -25,8 +25,19 @@ export default function ClientesPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from("clientes").select("*").order("nombre")
-    setClientes(data || [])
+    const TAM = 1000
+    let desde = 0
+    let todos: Cliente[] = []
+    while (true) {
+      const { data, error } = await supabase
+        .from("clientes").select("*").order("nombre")
+        .range(desde, desde + TAM - 1)
+      if (error || !data || data.length === 0) break
+      todos = todos.concat(data)
+      if (data.length < TAM) break
+      desde += TAM
+    }
+    setClientes(todos)
     setLoading(false)
   }
 
