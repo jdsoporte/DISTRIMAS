@@ -74,6 +74,7 @@ export default function NuevoPedidoPage() {
   const clienteSeleccionado = clientes.find(c => c.id === clienteId)
   const clientesFiltrados = clientes.filter(c =>
     c.nombre.toLowerCase().includes(buscarCliente.toLowerCase()) ||
+    (c.razon_social || "").toLowerCase().includes(buscarCliente.toLowerCase()) ||
     c.codigo.toLowerCase().includes(buscarCliente.toLowerCase())
   )
   const productosFiltrados = productos.filter(p =>
@@ -167,6 +168,7 @@ export default function NuevoPedidoPage() {
         `🏪 *PEDIDO - ${config.nombre_empresa}*`,
         ``,
         `📋 *Cliente:* ${cliente?.nombre || ""} · Cód: ${cliente?.codigo || ""}`,
+        ...(cliente?.razon_social ? [`🏬 *Razón social:* ${cliente.razon_social}`] : []),
         `📍 *Municipio:* ${cliente?.municipio || ""}`,
         `👤 *Vendedor:* ${user?.nombre || ""}`,
         `📅 *Fecha:* ${fecha} · ${hora}`,
@@ -208,6 +210,7 @@ export default function NuevoPedidoPage() {
               {/* Código grande y visible */}
               <p style={{ fontSize: "22px", fontWeight: "bold", color: "#D72638", margin: "0 0 2px", letterSpacing: "1px" }}>{clienteSeleccionado.codigo}</p>
               <p style={{ fontWeight: 600, fontSize: "15px", margin: "0 0 4px", color: theme.text }}>{clienteSeleccionado.nombre}</p>
+              {clienteSeleccionado.razon_social && <p style={{ fontSize: "13px", margin: "0 0 4px", color: theme.text, opacity: 0.85 }}>{clienteSeleccionado.razon_social}</p>}
               <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>
                 {clienteSeleccionado.municipio}{clienteSeleccionado.barrio ? ` · ${clienteSeleccionado.barrio}` : ""}{clienteSeleccionado.telefono ? ` · ${clienteSeleccionado.telefono}` : ""}
               </p>
@@ -238,6 +241,7 @@ export default function NuevoPedidoPage() {
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
+                      {c.razon_social && <p style={{ color: theme.text, fontSize: "12px", margin: "0 0 2px", opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.razon_social}</p>}
                       <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{c.municipio}{c.telefono ? ` · ${c.telefono}` : ""}</p>
                     </div>
                   </div>
