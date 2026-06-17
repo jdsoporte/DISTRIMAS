@@ -83,6 +83,19 @@ export default function PedidosPage() {
     return coincide && (filtroEstado === "todos" || p.estado === filtroEstado)
   })
 
+  // Solo cuentan confirmados y entregados para las sumatorias en pesos
+  const contables = filtrados.filter(p => p.estado === "confirmado" || p.estado === "entregado")
+  const totalGeneral = contables.reduce((s, p) => s + (p.total || 0), 0)
+  const porVendedor = Object.values(
+    contables.reduce((acc, p) => {
+      const nombre = p.usuario?.nombre || "Sin vendedor"
+      if (!acc[nombre]) acc[nombre] = { nombre, cantidad: 0, total: 0 }
+      acc[nombre].cantidad++
+      acc[nombre].total += p.total || 0
+      return acc
+    }, {} as Record<string, { nombre: string; cantidad: number; total: number }>)
+  ).sort((a, b) => b.total - a.total)
+
   const esHoy = fechaIni === hoy() && fechaFin === hoy()
   const inputFecha = {
     background: theme.cardAlt,
@@ -146,6 +159,32 @@ export default function PedidosPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Resumen de totales (confirmados + entregados) */}
+      <div style={{ display: "grid", gridTemplateColumns: isAdmin && porVendedor.length > 0 ? "minmax(220px, 1fr) 2fr" : "1fr", gap: "12px", marginBottom: "14px" }}>
+        {/* Total general */}
+        <div style={{ background: "#0f1f3d", borderRadius: "12px", padding: "16px 18px", color: "white" }}>
+          <p style={{ fontSize: "11px", fontWeight: 700, opacity: 0.7, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 6px" }}>Total en pesos</p>
+          <p style={{ fontSize: "26px", fontWeight: 800, margin: "0 0 2px" }}>${totalGeneral.toLocaleString("es-CO")}</p>
+          <p style={{ fontSize: "12px", opacity: 0.7, margin: 0 }}>{contables.length} pedido{contables.length !== 1 ? "s" : ""} confirmado/entregado</p>
+        </div>
+
+        {/* Resumen por vendedor (solo admin) */}
+        {isAdmin && porVendedor.length > 0 && (
+          <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "14px 16px" }}>
+            <p style={{ fontSize: "11px", fontWeight: 700, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 10px" }}>Por vendedor</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px" }}>
+              {porVendedor.map(v => (
+                <div key={v.nombre} style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, borderRadius: "10px", padding: "10px 12px" }}>
+                  <p style={{ fontSize: "13px", fontWeight: 700, color: theme.text, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nombre}</p>
+                  <p style={{ fontSize: "16px", fontWeight: 800, color: "#16a34a", margin: "0 0 1px" }}>${v.total.toLocaleString("es-CO")}</p>
+                  <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{v.cantidad} pedido{v.cantidad !== 1 ? "s" : ""}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabla */}
