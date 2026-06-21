@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { Usuario } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
+import MapaVendedores from "@/components/MapaVendedores"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell,
@@ -259,6 +260,9 @@ export default function DashboardPage() {
           {isAdmin ? "Resumen general del sistema" : "Tu resumen personal del mes"}
         </p>
       </div>
+
+      {/* Mapa de ubicación de vendedores (solo admin) */}
+      {isAdmin && <MapaVendedores />}
 
       {/* ── TARJETAS ── */}
       <div className="cards-grid">
