@@ -74,11 +74,13 @@ export default function MapaVendedores() {
   async function cargarDatos() {
     setLoading(true)
     // Día de hoy en Colombia: 0=Domingo..6=Sábado
-    const diaCol = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" })).getDay()
+    const ahoraCol = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
+    const diaCol = ahoraCol.getDay()
+    const quincenaHoy = ahoraCol.getDate() <= 15 ? 1 : 2
 
     const [u, a] = await Promise.all([
       supabase.from("usuarios").select("*, perfil:perfiles(*)").eq("activo", true).order("nombre"),
-      supabase.from("asignaciones_ruta").select("usuario_id, descanso, ruta:rutas(nombre)").eq("dia_semana", diaCol),
+      supabase.from("asignaciones_ruta").select("usuario_id, descanso, ruta:rutas(nombre)").eq("dia_semana", diaCol).eq("quincena", quincenaHoy),
     ])
     const vendedores = (u.data || []).filter(x => (x.perfil?.nombre || "").toLowerCase() !== "administrador")
     const asigs = a.data || []
