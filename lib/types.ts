@@ -61,6 +61,7 @@ export interface AsignacionRuta {
   dia_semana: number
   ruta_id: string | null
   descanso: boolean
+  quincena: number
   created_at: string
 }
 export interface Festivo {
