@@ -33,6 +33,8 @@ export default function NuevoPedidoPage() {
   const [rutas, setRutas]         = useState<Ruta[]>([])
   const [rutaFiltro, setRutaFiltro] = useState<string>("todas")
   const [infoRutaHoy, setInfoRutaHoy] = useState("")
+  const [rutaFestivo, setRutaFestivo] = useState<{ id: string; nombre: string } | null>(null)
+  const [rutaHoyId, setRutaHoyId] = useState<string>("")
 
   useEffect(() => {
     cargarTodo("clientes").then(setClientes)
@@ -77,9 +79,29 @@ export default function NuevoPedidoPage() {
     } else if (asig.ruta_id && asig.ruta) {
       setInfoRutaHoy(`Hoy te toca: ${asig.ruta.nombre}`)
       setRutaFiltro(asig.ruta_id)
+      setRutaHoyId(asig.ruta_id)
     } else {
       setInfoRutaHoy("Hoy no tienes ruta asignada. Puedes ver todos los clientes.")
       setRutaFiltro("todas")
+    }
+
+    // ¿Ayer fue festivo? Si sí, ofrecer la ruta que tenía pendiente ese día
+    const ayer = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
+    ayer.setDate(ayer.getDate() - 1)
+    const ayerStr = `${ayer.getFullYear()}-${String(ayer.getMonth() + 1).padStart(2, "0")}-${String(ayer.getDate()).padStart(2, "0")}`
+    const ayerDiaSem = ayer.getDay() // 0=Dom..6=Sab
+
+    if (ayerDiaSem !== 0) {
+      const { data: fest } = await supabase.from("festivos").select("fecha").eq("fecha", ayerStr).maybeSingle()
+      if (fest) {
+        // Ayer fue festivo: traer la ruta que el vendedor tenía asignada ese día
+        const { data: asigAyer } = await supabase
+          .from("asignaciones_ruta").select("ruta_id, descanso, ruta:rutas(*)")
+          .eq("usuario_id", user.id).eq("dia_semana", ayerDiaSem).maybeSingle()
+        if (asigAyer && asigAyer.ruta_id && !asigAyer.descanso && asigAyer.ruta) {
+          setRutaFestivo({ id: asigAyer.ruta_id, nombre: asigAyer.ruta.nombre })
+        }
+      }
     }
   }
 
@@ -256,6 +278,24 @@ export default function NuevoPedidoPage() {
         {infoRutaHoy && (
           <div style={{ background: infoRutaHoy.startsWith("Hoy te toca") ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)", border: `1px solid ${infoRutaHoy.startsWith("Hoy te toca") ? "rgba(59,130,246,0.25)" : "rgba(245,158,11,0.25)"}`, borderRadius: "10px", padding: "10px 14px", marginBottom: "12px" }}>
             <p style={{ fontSize: "14px", fontWeight: 700, color: infoRutaHoy.startsWith("Hoy te toca") ? "#3b82f6" : "#f59e0b", margin: 0 }}>{infoRutaHoy}</p>
+          </div>
+        )}
+
+        {/* Festivo de ayer: ofrecer elegir entre la ruta de hoy y la del festivo */}
+        {rutaFestivo && (
+          <div style={{ background: "rgba(215,38,56,0.07)", border: "1px solid rgba(215,38,56,0.25)", borderRadius: "10px", padding: "12px 14px", marginBottom: "12px" }}>
+            <p style={{ fontSize: "13px", fontWeight: 700, color: "#D72638", margin: "0 0 4px" }}>Ayer fue festivo</p>
+            <p style={{ fontSize: "12px", color: theme.muted, margin: "0 0 10px" }}>Quedó pendiente tu ruta del festivo. Elige cuál vas a trabajar:</p>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {rutaHoyId && (
+                <button onClick={() => setRutaFiltro(rutaHoyId)} style={{ padding: "8px 14px", borderRadius: "8px", border: rutaFiltro === rutaHoyId ? "2px solid #3b82f6" : `1px solid ${theme.border}`, background: theme.cardAlt, color: theme.text, fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                  Ruta de hoy
+                </button>
+              )}
+              <button onClick={() => setRutaFiltro(rutaFestivo.id)} style={{ padding: "8px 14px", borderRadius: "8px", border: rutaFiltro === rutaFestivo.id ? "2px solid #D72638" : `1px solid ${theme.border}`, background: theme.cardAlt, color: theme.text, fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                Ruta del festivo: {rutaFestivo.nombre}
+              </button>
+            </div>
           </div>
         )}
 
