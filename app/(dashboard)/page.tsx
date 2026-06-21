@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { Usuario } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
 import MapaVendedores from "@/components/MapaVendedores"
+import HistorialDia from "@/components/HistorialDia"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell,
@@ -263,6 +264,9 @@ export default function DashboardPage() {
 
       {/* Mapa de ubicación de vendedores (solo admin) */}
       {isAdmin && <MapaVendedores />}
+
+      {/* Historial de ventas por día (admin y vendedor) */}
+      <HistorialDia />
 
       {/* ── TARJETAS ── */}
       <div className="cards-grid">
