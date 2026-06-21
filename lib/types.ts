@@ -55,6 +55,14 @@ export interface Ruta {
   activo: boolean
   created_at: string
 }
+export interface AsignacionRuta {
+  id: string
+  usuario_id: string
+  dia_semana: number
+  ruta_id: string | null
+  descanso: boolean
+  created_at: string
+}
 export interface Producto {
   id: string
   codigo: string
