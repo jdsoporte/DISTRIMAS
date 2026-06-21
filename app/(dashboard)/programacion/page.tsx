@@ -25,6 +25,7 @@ export default function ProgramacionPage() {
   const [msg, setMsg] = useState("")
   const [error, setError] = useState("")
   const [guardandoCelda, setGuardandoCelda] = useState<string | null>(null)
+  const [quincena, setQuincena] = useState(1)
 
   useEffect(() => { load() }, [])
 
@@ -45,7 +46,7 @@ export default function ProgramacionPage() {
 
   // Devuelve el valor actual de la celda (ruta_id, "descanso" o "")
   function valorCelda(usuarioId: string, dia: number): string {
-    const a = asignaciones.find(x => x.usuario_id === usuarioId && x.dia_semana === dia)
+    const a = asignaciones.find(x => x.usuario_id === usuarioId && x.dia_semana === dia && x.quincena === quincena)
     if (!a) return SIN
     if (a.descanso) return DESCANSO
     return a.ruta_id || SIN
@@ -58,8 +59,8 @@ export default function ProgramacionPage() {
     const descanso = valor === DESCANSO
     const ruta_id = (valor === DESCANSO || valor === SIN) ? null : valor
 
-    // Buscar si ya existe la asignacion
-    const existente = asignaciones.find(x => x.usuario_id === usuarioId && x.dia_semana === dia)
+    // Buscar si ya existe la asignacion para esta quincena
+    const existente = asignaciones.find(x => x.usuario_id === usuarioId && x.dia_semana === dia && x.quincena === quincena)
 
     try {
       if (valor === SIN && existente) {
@@ -74,7 +75,7 @@ export default function ProgramacionPage() {
         setAsignaciones(prev => prev.map(x => x.id === existente.id ? data : x))
       } else if (valor !== SIN) {
         const { data, error: err } = await supabase.from("asignaciones_ruta")
-          .insert({ usuario_id: usuarioId, dia_semana: dia, ruta_id, descanso }).select().single()
+          .insert({ usuario_id: usuarioId, dia_semana: dia, ruta_id, descanso, quincena }).select().single()
         if (err) { setError("No se pudo guardar: " + err.message); setGuardandoCelda(null); return }
         setAsignaciones(prev => [...prev, data])
       }
@@ -97,8 +98,26 @@ export default function ProgramacionPage() {
       <div className="page-header">
         <div>
           <h2 style={{ fontSize: "20px", fontWeight: "bold", margin: "0 0 4px", color: theme.text }}>Programación de rutas</h2>
-          <p style={{ color: theme.muted, fontSize: "13px", margin: 0 }}>Asigna a cada vendedor su ruta de cada día. Se repite todas las semanas.</p>
+          <p style={{ color: theme.muted, fontSize: "13px", margin: 0 }}>Asigna la ruta de cada vendedor por día. La quincena 1 aplica del 1 al 15, y la quincena 2 del 16 al fin de mes.</p>
         </div>
+      </div>
+
+      {/* Pestañas de quincena */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+        {[1, 2].map(q => (
+          <button
+            key={q}
+            onClick={() => setQuincena(q)}
+            style={{
+              padding: "9px 18px", borderRadius: "9px", fontSize: "13px", fontWeight: 700, cursor: "pointer",
+              border: quincena === q ? "2px solid #D72638" : `1px solid ${theme.border}`,
+              background: quincena === q ? "rgba(215,38,56,0.08)" : theme.card,
+              color: quincena === q ? "#D72638" : theme.muted,
+            }}
+          >
+            Quincena {q} <span style={{ fontWeight: 500, fontSize: "12px" }}>({q === 1 ? "días 1–15" : "días 16–fin"})</span>
+          </button>
+        ))}
       </div>
 
       {msg && (
@@ -163,7 +182,7 @@ export default function ProgramacionPage() {
       )}
 
       <p style={{ color: theme.muted, fontSize: "12px", marginTop: "12px" }}>
-        Cada cambio se guarda solo. "Descanso" marca el día libre del vendedor; "Sin asignar" lo deja sin ruta ese día.
+        Cada cambio se guarda solo. "Descanso" marca el día libre del vendedor; "Sin asignar" lo deja sin ruta ese día. Estás editando la <strong>Quincena {quincena}</strong>.
       </p>
     </div>
   )
