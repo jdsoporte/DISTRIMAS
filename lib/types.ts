@@ -44,6 +44,14 @@ export interface Cliente {
   barrio: string
   direccion: string
   telefono: string
+  ruta_id: string | null
+  activo: boolean
+  created_at: string
+}
+export interface Ruta {
+  id: string
+  nombre: string
+  descripcion: string
   activo: boolean
   created_at: string
 }
