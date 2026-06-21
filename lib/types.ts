@@ -63,6 +63,11 @@ export interface AsignacionRuta {
   descanso: boolean
   created_at: string
 }
+export interface Festivo {
+  id: string
+  fecha: string
+  created_at: string
+}
 export interface Producto {
   id: string
   codigo: string
