@@ -42,7 +42,7 @@ export default function HistorialDia() {
       .from("pedidos")
       .select("id, total, estado, created_at, usuario_id, cliente:clientes(nombre), usuario:usuarios(nombre)")
       .gte("created_at", ini).lte("created_at", fin)
-      .in("estado", ["confirmado"])
+      .in("estado", ["confirmado", "entregado"])
       .order("created_at", { ascending: false })
     if (!isAdmin && uid) q = q.eq("usuario_id", uid)
     const { data } = await q
