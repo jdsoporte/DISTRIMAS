@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Ruta } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
+import GestionClientesRuta from "@/components/GestionClientesRuta"
 
 const EMPTY: Partial<Ruta> = { nombre: "", descripcion: "", activo: true }
 
@@ -22,6 +23,7 @@ export default function RutasPage() {
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [modalAgrupar, setModalAgrupar] = useState(false)
   const [nombreGrupo, setNombreGrupo] = useState("")
+  const [rutaClientes, setRutaClientes] = useState<Ruta | null>(null)
 
   useEffect(() => { load() }, [])
 
@@ -263,6 +265,7 @@ export default function RutasPage() {
                   </td>
                   <td style={{ padding: "12px 16px" }}>
                     <div className="acciones-wrap">
+                      <button onClick={() => setRutaClientes(r)} style={{ padding: "6px 12px", background: "rgba(59,130,246,0.12)", color: "#3b82f6", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer" }}>Clientes</button>
                       <button onClick={() => abrir(r)} style={{ padding: "6px 12px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Editar</button>
                       <button onClick={() => toggleActivo(r)} style={{ padding: "6px 12px", background: r.activo ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.12)", color: r.activo ? "#f59e0b" : "#22c55e", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer" }}>
                         {r.activo ? "Desactivar" : "Activar"}
@@ -315,6 +318,13 @@ export default function RutasPage() {
             </div>
           </div>
         </div>
+      )}
+      {rutaClientes && (
+        <GestionClientesRuta
+          ruta={rutaClientes}
+          onClose={() => setRutaClientes(null)}
+          onCambio={load}
+        />
       )}
     </div>
   )
