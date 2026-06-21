@@ -67,8 +67,10 @@ export default function NuevoPedidoPage() {
     }
 
     const { data: asig } = await supabase
-      .from("asignaciones_ruta").select("*, ruta:rutas(*)")
+      .from("asignaciones_ruta").select("ruta_id, descanso, ruta:rutas(nombre)")
       .eq("usuario_id", user.id).eq("dia_semana", diaCol).maybeSingle()
+
+    const rutaHoyRel = asig ? (Array.isArray(asig.ruta) ? asig.ruta[0] : asig.ruta) : null
 
     if (!asig) {
       setInfoRutaHoy("Hoy no tienes ruta asignada. Puedes ver todos los clientes.")
@@ -76,8 +78,8 @@ export default function NuevoPedidoPage() {
     } else if (asig.descanso) {
       setInfoRutaHoy("Hoy es tu día de descanso. Si trabajas, puedes ver todos los clientes.")
       setRutaFiltro("todas")
-    } else if (asig.ruta_id && asig.ruta) {
-      setInfoRutaHoy(`Hoy te toca: ${asig.ruta.nombre}`)
+    } else if (asig.ruta_id && rutaHoyRel) {
+      setInfoRutaHoy(`Hoy te toca: ${rutaHoyRel.nombre}`)
       setRutaFiltro(asig.ruta_id)
       setRutaHoyId(asig.ruta_id)
     } else {
@@ -96,10 +98,13 @@ export default function NuevoPedidoPage() {
       if (fest) {
         // Ayer fue festivo: traer la ruta que el vendedor tenía asignada ese día
         const { data: asigAyer } = await supabase
-          .from("asignaciones_ruta").select("ruta_id, descanso, ruta:rutas(*)")
+          .from("asignaciones_ruta").select("ruta_id, descanso, ruta:rutas(nombre)")
           .eq("usuario_id", user.id).eq("dia_semana", ayerDiaSem).maybeSingle()
-        if (asigAyer && asigAyer.ruta_id && !asigAyer.descanso && asigAyer.ruta) {
-          setRutaFestivo({ id: asigAyer.ruta_id, nombre: asigAyer.ruta.nombre })
+        if (asigAyer && asigAyer.ruta_id && !asigAyer.descanso) {
+          // Supabase puede devolver la relación como objeto o como arreglo; normalizamos
+          const rutaRel = Array.isArray(asigAyer.ruta) ? asigAyer.ruta[0] : asigAyer.ruta
+          const nombreRuta = rutaRel?.nombre || "ruta"
+          setRutaFestivo({ id: asigAyer.ruta_id, nombre: nombreRuta })
         }
       }
     }
