@@ -15,6 +15,7 @@ const MENUS_ADMIN = [
   { id: "clientes", label: "Clientes", href: "/clientes" },
   { id: "inventario", label: "Inventario", href: "/inventario" },
   { id: "rutas", label: "Rutas", href: "/rutas" },
+  { id: "programacion", label: "Programación", href: "/programacion" },
   { section: "Administración" },
   { id: "usuarios", label: "Usuarios", href: "/usuarios" },
   { id: "perfiles", label: "Perfiles", href: "/perfiles" },
@@ -34,7 +35,7 @@ const MENUS_VENDEDOR = [
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard", "/pedidos": "Pedidos", "/pedidos/nuevo": "Nuevo pedido",
-  "/clientes": "Clientes", "/inventario": "Inventario", "/rutas": "Rutas",
+  "/clientes": "Clientes", "/inventario": "Inventario", "/rutas": "Rutas", "/programacion": "Programación",
   "/usuarios": "Usuarios", "/perfiles": "Perfiles y permisos", "/estadisticas": "Estadísticas",
   "/configuraciones": "Configuraciones",
 }
