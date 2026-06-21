@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import { Cliente, Producto } from "@/lib/types"
+import { Cliente, Producto, Ruta } from "@/lib/types"
 import { getSession } from "@/lib/auth"
 import { useTheme } from "@/lib/theme-context"
 
@@ -30,13 +30,58 @@ export default function NuevoPedidoPage() {
   const [warn, setWarn]           = useState("")
   const [showClientes, setShowClientes]   = useState(false)
   const [showProductos, setShowProductos] = useState(false)
+  const [rutas, setRutas]         = useState<Ruta[]>([])
+  const [rutaFiltro, setRutaFiltro] = useState<string>("todas")
+  const [infoRutaHoy, setInfoRutaHoy] = useState("")
 
   useEffect(() => {
     cargarTodo("clientes").then(setClientes)
     cargarTodo("productos").then(setProductos)
     supabase.from("configuraciones").select("whatsapp_numero,nombre_empresa").limit(1).single().then(r => setConfig(r.data))
+    cargarRutaDelDia()
     if (pedidoId) cargarPedido(pedidoId)
   }, [])
+
+  async function cargarRutaDelDia() {
+    // Cargar rutas activas (para el selector)
+    const { data: rutasData } = await supabase.from("rutas").select("*").eq("activo", true).order("nombre")
+    setRutas(rutasData || [])
+
+    const user = getSession()
+    const esAdmin = (user?.perfil?.nombre || "").toLowerCase() === "administrador"
+    if (esAdmin || !user?.id) {
+      // El admin ve todos los clientes, sin filtro por ruta
+      setRutaFiltro("todas")
+      return
+    }
+
+    // Día de hoy en Colombia: 0=Domingo, 1=Lunes ... 6=Sábado
+    const diaCol = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" })).getDay()
+
+    if (diaCol === 0) {
+      setInfoRutaHoy("Hoy es domingo, no hay ruta programada. Puedes ver todos los clientes.")
+      setRutaFiltro("todas")
+      return
+    }
+
+    const { data: asig } = await supabase
+      .from("asignaciones_ruta").select("*, ruta:rutas(*)")
+      .eq("usuario_id", user.id).eq("dia_semana", diaCol).maybeSingle()
+
+    if (!asig) {
+      setInfoRutaHoy("Hoy no tienes ruta asignada. Puedes ver todos los clientes.")
+      setRutaFiltro("todas")
+    } else if (asig.descanso) {
+      setInfoRutaHoy("Hoy es tu día de descanso. Si trabajas, puedes ver todos los clientes.")
+      setRutaFiltro("todas")
+    } else if (asig.ruta_id && asig.ruta) {
+      setInfoRutaHoy(`Hoy te toca: ${asig.ruta.nombre}`)
+      setRutaFiltro(asig.ruta_id)
+    } else {
+      setInfoRutaHoy("Hoy no tienes ruta asignada. Puedes ver todos los clientes.")
+      setRutaFiltro("todas")
+    }
+  }
 
   async function cargarTodo(tabla: "clientes" | "productos") {
     const TAM = 1000
@@ -72,11 +117,14 @@ export default function NuevoPedidoPage() {
   }
 
   const clienteSeleccionado = clientes.find(c => c.id === clienteId)
-  const clientesFiltrados = clientes.filter(c =>
-    c.nombre.toLowerCase().includes(buscarCliente.toLowerCase()) ||
-    (c.razon_social || "").toLowerCase().includes(buscarCliente.toLowerCase()) ||
-    c.codigo.toLowerCase().includes(buscarCliente.toLowerCase())
-  )
+  const clientesFiltrados = clientes.filter(c => {
+    const coincideTexto =
+      c.nombre.toLowerCase().includes(buscarCliente.toLowerCase()) ||
+      (c.razon_social || "").toLowerCase().includes(buscarCliente.toLowerCase()) ||
+      c.codigo.toLowerCase().includes(buscarCliente.toLowerCase())
+    const coincideRuta = rutaFiltro === "todas" || c.ruta_id === rutaFiltro
+    return coincideTexto && coincideRuta
+  })
   const productosFiltrados = productos.filter(p =>
     p.nombre.toLowerCase().includes(buscarProducto.toLowerCase()) ||
     p.codigo.toLowerCase().includes(buscarProducto.toLowerCase())
@@ -204,6 +252,24 @@ export default function NuevoPedidoPage() {
       <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "14px" }}>
         <p style={{ fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 10px" }}>Cliente</p>
 
+        {/* Panel de la ruta de hoy (solo vendedores) */}
+        {infoRutaHoy && (
+          <div style={{ background: infoRutaHoy.startsWith("Hoy te toca") ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)", border: `1px solid ${infoRutaHoy.startsWith("Hoy te toca") ? "rgba(59,130,246,0.25)" : "rgba(245,158,11,0.25)"}`, borderRadius: "10px", padding: "10px 14px", marginBottom: "12px" }}>
+            <p style={{ fontSize: "14px", fontWeight: 700, color: infoRutaHoy.startsWith("Hoy te toca") ? "#3b82f6" : "#f59e0b", margin: 0 }}>{infoRutaHoy}</p>
+          </div>
+        )}
+
+        {/* Selector de ruta para filtrar clientes (cambiar a otra si hace falta) */}
+        {!clienteSeleccionado && rutas.length > 0 && (
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "6px" }}>Ver clientes de la ruta</label>
+            <select value={rutaFiltro} onChange={e => setRutaFiltro(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+              <option value="todas">Todas las rutas</option>
+              {rutas.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+          </div>
+        )}
+
         {clienteSeleccionado ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "14px 16px", background: theme.cardAlt, borderRadius: "10px", border: `1px solid ${theme.border}` }}>
             <div style={{ minWidth: 0 }}>
@@ -227,9 +293,9 @@ export default function NuevoPedidoPage() {
               style={inp}
               autoComplete="off"
             />
-            {showClientes && buscarCliente && (
+            {showClientes && (buscarCliente || rutaFiltro !== "todas") && (
               <div style={dropdownStyle}>
-                {clientesFiltrados.slice(0, 8).map(c => (
+                {clientesFiltrados.slice(0, 50).map(c => (
                   <div
                     key={c.id}
                     onClick={() => { setClienteId(c.id); setBuscarCliente(""); setShowClientes(false) }}
