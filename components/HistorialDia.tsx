@@ -42,7 +42,7 @@ export default function HistorialDia() {
       .from("pedidos")
       .select("id, total, estado, created_at, usuario_id, cliente:clientes(nombre), usuario:usuarios(nombre)")
       .gte("created_at", ini).lte("created_at", fin)
-      .in("estado", ["confirmado", "entregado"])
+      .in("estado", ["confirmado"])
       .order("created_at", { ascending: false })
     if (!isAdmin && uid) q = q.eq("usuario_id", uid)
     const { data } = await q
@@ -72,7 +72,7 @@ export default function HistorialDia() {
           <h3 style={{ fontSize: "16px", fontWeight: "bold", color: theme.text, margin: "0 0 2px" }}>
             {isAdmin ? "Historial de ventas por día" : "Mis ventas del día"}
           </h3>
-          <p style={{ fontSize: "12px", color: theme.muted, margin: 0 }}>Solo pedidos confirmados y entregados.</p>
+          <p style={{ fontSize: "12px", color: theme.muted, margin: 0 }}>Solo pedidos confirmados.</p>
         </div>
         <input
           type="date" value={fecha} max={hoyCol()} onChange={e => setFecha(e.target.value)}
