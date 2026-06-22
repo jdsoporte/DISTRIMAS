@@ -8,6 +8,8 @@ interface ClienteRuta {
   id: string
   codigo: string
   nombre: string
+  razon_social: string
+  direccion: string
   municipio: string
   ruta_id: string | null
 }
@@ -38,7 +40,7 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
     let desde = 0; const TAM = 1000
     while (true) {
       const { data, error: err } = await supabase
-        .from("clientes").select("id, codigo, nombre, municipio, ruta_id")
+        .from("clientes").select("id, codigo, nombre, razon_social, direccion, municipio, ruta_id")
         .eq("ruta_id", ruta.id).order("nombre").range(desde, desde + TAM - 1)
       if (err) { setError("No se pudieron cargar los clientes: " + err.message); break }
       if (!data || data.length === 0) break
@@ -83,8 +85,8 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
     setBuscando(true)
     const term = q.trim()
     const { data } = await supabase
-      .from("clientes").select("id, codigo, nombre, municipio, ruta_id")
-      .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%,municipio.ilike.%${term}%`)
+      .from("clientes").select("id, codigo, nombre, razon_social, direccion, municipio, ruta_id")
+      .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%,razon_social.ilike.%${term}%,municipio.ilike.%${term}%`)
       .limit(30)
     setResultados((data || []).filter(c => c.ruta_id !== ruta.id))
     setBuscando(false)
@@ -151,7 +153,8 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
                 <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${theme.border}` }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: "13px", fontWeight: 600, color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
-                    <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}</p>
+                    {c.razon_social && <p style={{ fontSize: "11px", color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.razon_social}</p>}
+                    <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}{c.direccion ? " · " + c.direccion : ""}</p>
                   </div>
                   <button onClick={() => agregarCliente(c)} disabled={trabajando} style={{ padding: "5px 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Agregar</button>
                 </div>
@@ -175,7 +178,8 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
               <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${theme.border}` }}>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ fontSize: "13px", fontWeight: 600, color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
-                  <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}</p>
+                  {c.razon_social && <p style={{ fontSize: "11px", color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.razon_social}</p>}
+                  <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}{c.direccion ? " · " + c.direccion : ""}</p>
                 </div>
                 <button onClick={() => quitarCliente(c)} disabled={trabajando} style={{ padding: "5px 12px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Quitar</button>
               </div>
