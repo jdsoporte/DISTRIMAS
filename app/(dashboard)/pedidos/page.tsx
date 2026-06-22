@@ -27,6 +27,8 @@ export default function PedidosPage() {
   const [detalle, setDetalle] = useState<Pedido | null>(null)
   const [fechaIni, setFechaIni] = useState(hoy())
   const [fechaFin, setFechaFin] = useState(hoy())
+  const [msgEstado, setMsgEstado] = useState("")
+  const [errorEstado, setErrorEstado] = useState("")
   const isAdmin = getSession()?.perfil?.nombre === "Administrador"
   const userId = getSession()?.id
 
@@ -51,9 +53,16 @@ export default function PedidosPage() {
   }
 
   async function cambiarEstado(id: string, estado: string) {
-    await supabase.from("pedidos").update({ estado }).eq("id", id)
-    load()
+    setMsgEstado(""); setErrorEstado("")
+    const { error } = await supabase.from("pedidos").update({ estado }).eq("id", id)
+    if (error) {
+      setErrorEstado("No se pudo cambiar el estado: " + error.message)
+      return
+    }
+    await load()
     if (detalle?.id === id) setDetalle(d => d ? { ...d, estado: estado as Pedido["estado"] } : d)
+    setMsgEstado(`✓ Pedido marcado como ${estado}.`)
+    setTimeout(() => setMsgEstado(""), 2500)
   }
 
   async function eliminar(id: string) {
@@ -161,6 +170,13 @@ export default function PedidosPage() {
         </div>
       </div>
 
+      {msgEstado && (
+        <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22c55e", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "12px" }}>{msgEstado}</div>
+      )}
+      {errorEstado && (
+        <div style={{ background: "rgba(215,38,56,0.1)", border: "1px solid rgba(215,38,56,0.25)", color: "#D72638", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "12px" }}>{errorEstado}</div>
+      )}
+
       {/* Resumen de totales (confirmados + entregados) */}
       <div style={{ display: "grid", gridTemplateColumns: isAdmin && porVendedor.length > 0 ? "minmax(220px, 1fr) 2fr" : "1fr", gap: "12px", marginBottom: "14px" }}>
         {/* Total general */}
@@ -222,7 +238,7 @@ export default function PedidosPage() {
                         {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) &&
                           <button onClick={() => router.push(`/pedidos/nuevo?id=${p.id}`)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Editar</button>}
                         {p.estado === "borrador" && <button onClick={() => cambiarEstado(p.id, "confirmado")} style={{ padding: "5px 10px", background: "rgba(59,130,246,0.15)", color: "#3b82f6", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Confirmar</button>}
-                        {p.estado === "confirmado" && <button onClick={() => cambiarEstado(p.id, "entregado")} style={{ padding: "5px 10px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Entregar</button>}
+                        {isAdmin && p.estado === "confirmado" && <button onClick={() => cambiarEstado(p.id, "entregado")} style={{ padding: "5px 10px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Entregar</button>}
                         {(p.estado === "borrador" || p.estado === "confirmado") && <button onClick={() => cambiarEstado(p.id, "cancelado")} style={{ padding: "5px 10px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Cancelar</button>}
                         {(p.estado === "borrador" || isAdmin) && <button onClick={() => eliminar(p.id)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.muted, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Eliminar</button>}
                       </div>
