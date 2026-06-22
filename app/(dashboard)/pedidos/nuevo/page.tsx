@@ -58,7 +58,9 @@ export default function NuevoPedidoPage() {
     }
 
     // Día de hoy en Colombia: 0=Domingo, 1=Lunes ... 6=Sábado
-    const diaCol = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" })).getDay()
+    const ahoraCol = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
+    const diaCol = ahoraCol.getDay()
+    const quincenaHoy = ahoraCol.getDate() <= 15 ? 1 : 2
 
     if (diaCol === 0) {
       setInfoRutaHoy("Hoy es domingo, no hay ruta programada. Puedes ver todos los clientes.")
@@ -68,7 +70,7 @@ export default function NuevoPedidoPage() {
 
     const { data: asig } = await supabase
       .from("asignaciones_ruta").select("ruta_id, descanso, ruta:rutas(nombre)")
-      .eq("usuario_id", user.id).eq("dia_semana", diaCol).maybeSingle()
+      .eq("usuario_id", user.id).eq("dia_semana", diaCol).eq("quincena", quincenaHoy).maybeSingle()
 
     const rutaHoyRel = asig ? (Array.isArray(asig.ruta) ? asig.ruta[0] : asig.ruta) : null
 
@@ -92,6 +94,7 @@ export default function NuevoPedidoPage() {
     ayer.setDate(ayer.getDate() - 1)
     const ayerStr = `${ayer.getFullYear()}-${String(ayer.getMonth() + 1).padStart(2, "0")}-${String(ayer.getDate()).padStart(2, "0")}`
     const ayerDiaSem = ayer.getDay() // 0=Dom..6=Sab
+    const quincenaAyer = ayer.getDate() <= 15 ? 1 : 2
 
     if (ayerDiaSem !== 0) {
       const { data: fest } = await supabase.from("festivos").select("fecha").eq("fecha", ayerStr).maybeSingle()
@@ -99,7 +102,7 @@ export default function NuevoPedidoPage() {
         // Ayer fue festivo: traer la ruta que el vendedor tenía asignada ese día
         const { data: asigAyer } = await supabase
           .from("asignaciones_ruta").select("ruta_id, descanso, ruta:rutas(nombre)")
-          .eq("usuario_id", user.id).eq("dia_semana", ayerDiaSem).maybeSingle()
+          .eq("usuario_id", user.id).eq("dia_semana", ayerDiaSem).eq("quincena", quincenaAyer).maybeSingle()
         if (asigAyer && asigAyer.ruta_id && !asigAyer.descanso) {
           // Supabase puede devolver la relación como objeto o como arreglo; normalizamos
           const rutaRel = Array.isArray(asigAyer.ruta) ? asigAyer.ruta[0] : asigAyer.ruta
@@ -219,14 +222,16 @@ export default function NuevoPedidoPage() {
       if (err) { setSaving(false); return setError(err.message) }
       await supabase.from("pedido_items").delete().eq("pedido_id", pedidoId)
       const itemsInsert = items.map(i => ({ pedido_id: pedidoId, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
-      await supabase.from("pedido_items").insert(itemsInsert)
+      const { error: errItems } = await supabase.from("pedido_items").insert(itemsInsert)
+      if (errItems) { setSaving(false); return setError("No se pudieron guardar los productos: " + errItems.message) }
     } else {
       const { data: pedido, error: err } = await supabase.from("pedidos")
         .insert({ cliente_id: clienteId, usuario_id: user?.id, estado, observaciones, total })
         .select().single()
       if (err || !pedido) { setSaving(false); return setError(err?.message || "Error al crear pedido") }
       const itemsInsert = items.map(i => ({ pedido_id: pedido.id, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
-      await supabase.from("pedido_items").insert(itemsInsert)
+      const { error: errItems } = await supabase.from("pedido_items").insert(itemsInsert)
+      if (errItems) { setSaving(false); return setError("No se pudieron guardar los productos: " + errItems.message) }
     }
 
     setSaving(false)
