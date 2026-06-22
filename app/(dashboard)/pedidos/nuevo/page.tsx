@@ -209,15 +209,16 @@ export default function NuevoPedidoPage() {
 
   const total = items.reduce((acc, i) => acc + i.cantidad * i.precio_unitario, 0)
 
-  async function guardar(estado: "borrador" | "confirmado") {
+  async function guardar() {
     if (!clienteId) return setError("Selecciona un cliente")
     if (items.length === 0) return setError("Agrega al menos un producto")
     setSaving(true); setError(""); setWarn("")
     const user = getSession()
 
     if (modoEdicion && pedidoId) {
+      // Al editar NO se cambia el estado (se mantiene el que tenga el pedido)
       const { error: err } = await supabase.from("pedidos")
-        .update({ cliente_id: clienteId, estado, observaciones, total })
+        .update({ cliente_id: clienteId, observaciones, total })
         .eq("id", pedidoId)
       if (err) { setSaving(false); return setError(err.message) }
       await supabase.from("pedido_items").delete().eq("pedido_id", pedidoId)
@@ -225,8 +226,9 @@ export default function NuevoPedidoPage() {
       const { error: errItems } = await supabase.from("pedido_items").insert(itemsInsert)
       if (errItems) { setSaving(false); return setError("No se pudieron guardar los productos: " + errItems.message) }
     } else {
+      // Pedido nuevo: SIEMPRE queda en borrador. Se confirma después desde la lista.
       const { data: pedido, error: err } = await supabase.from("pedidos")
-        .insert({ cliente_id: clienteId, usuario_id: user?.id, estado, observaciones, total })
+        .insert({ cliente_id: clienteId, usuario_id: user?.id, estado: "borrador", observaciones, total })
         .select().single()
       if (err || !pedido) { setSaving(false); return setError(err?.message || "Error al crear pedido") }
       const itemsInsert = items.map(i => ({ pedido_id: pedido.id, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
@@ -235,34 +237,6 @@ export default function NuevoPedidoPage() {
     }
 
     setSaving(false)
-
-    // Si se confirmó y hay número de WhatsApp → abrir chat
-    if (estado === "confirmado" && config?.whatsapp_numero) {
-      const cliente = clientes.find(c => c.id === clienteId)
-      const user    = getSession()
-      const ahora   = new Date()
-      const fecha   = ahora.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/Bogota" })
-      const hora    = ahora.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })
-      const lineas  = items.map(i => `• [${i.producto.codigo}] ${i.producto.nombre} x${i.cantidad} - $${i.precio_unitario.toLocaleString("es-CO")} = $${(i.cantidad * i.precio_unitario).toLocaleString("es-CO")}`).join("\n")
-      const msg = [
-        `🏪 *PEDIDO - ${config.nombre_empresa}*`,
-        ``,
-        `📋 *Cliente:* ${cliente?.nombre || ""} · Cód: ${cliente?.codigo || ""}`,
-        ...(cliente?.razon_social ? [`🏬 *Razón social:* ${cliente.razon_social}`] : []),
-        `📍 *Municipio:* ${cliente?.municipio || ""}`,
-        `👤 *Vendedor:* ${user?.nombre || ""}`,
-        `📅 *Fecha:* ${fecha} · ${hora}`,
-        ``,
-        `*PRODUCTOS:*`,
-        lineas,
-        ``,
-        `💰 *TOTAL: $${total.toLocaleString("es-CO")}*`,
-        observaciones ? `\n📝 ${observaciones}` : "",
-      ].join("\n").trim()
-
-      window.open(`https://wa.me/${config.whatsapp_numero}?text=${encodeURIComponent(msg)}`, "_blank")
-    }
-
     router.push("/pedidos")
   }
 
@@ -488,16 +462,8 @@ export default function NuevoPedidoPage() {
           <p style={{ fontSize: "26px", fontWeight: "bold", margin: 0, color: theme.text }}>${total.toLocaleString("es-CO")}</p>
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button onClick={() => guardar("borrador")} disabled={saving} style={{ padding: "11px 20px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
-            {modoEdicion ? "Guardar cambios" : "Guardar borrador"}
-          </button>
-          <button onClick={() => guardar("confirmado")} disabled={saving} style={{ padding: "11px 20px", background: "#D72638", color: "white", fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: saving ? 0.6 : 1, display: "flex", alignItems: "center", gap: "8px" }}>
-            {saving ? "Guardando..." : (
-              <>
-                Confirmar pedido
-                {config?.whatsapp_numero && <span style={{ fontSize: "16px" }}>📱</span>}
-              </>
-            )}
+          <button onClick={() => guardar()} disabled={saving} style={{ padding: "11px 24px", background: "#D72638", color: "white", fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+            {saving ? "Guardando..." : (modoEdicion ? "Guardar cambios" : "Guardar pedido")}
           </button>
         </div>
       </div>
