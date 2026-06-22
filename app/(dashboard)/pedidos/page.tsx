@@ -29,8 +29,13 @@ export default function PedidosPage() {
   const [fechaFin, setFechaFin] = useState(hoy())
   const [msgEstado, setMsgEstado] = useState("")
   const [errorEstado, setErrorEstado] = useState("")
+  const [config, setConfig] = useState<{ whatsapp_numero: string; nombre_empresa: string } | null>(null)
   const isAdmin = getSession()?.perfil?.nombre === "Administrador"
   const userId = getSession()?.id
+
+  useEffect(() => {
+    supabase.from("configuraciones").select("whatsapp_numero,nombre_empresa").limit(1).single().then(r => setConfig(r.data))
+  }, [])
 
   useEffect(() => { load() }, [fechaIni, fechaFin])
 
@@ -52,13 +57,46 @@ export default function PedidosPage() {
     setLoading(false)
   }
 
+  function abrirWhatsApp(pedido: Pedido) {
+    if (!config?.whatsapp_numero) return
+    const cliente: any = Array.isArray(pedido.cliente) ? pedido.cliente[0] : pedido.cliente
+    const vendedor: any = Array.isArray(pedido.usuario) ? pedido.usuario[0] : pedido.usuario
+    const items: any[] = pedido.items || []
+    const ahora = new Date()
+    const fecha = ahora.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/Bogota" })
+    const hora = ahora.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })
+    const lineas = items.map(i => {
+      const prod = Array.isArray(i.producto) ? i.producto[0] : i.producto
+      return `• [${prod?.codigo || ""}] ${prod?.nombre || ""} x${i.cantidad} - $${(i.precio_unitario || 0).toLocaleString("es-CO")} = $${((i.cantidad || 0) * (i.precio_unitario || 0)).toLocaleString("es-CO")}`
+    }).join("\n")
+    const msg = [
+      `🏪 *PEDIDO - ${config.nombre_empresa || ""}*`,
+      ``,
+      `📋 *Cliente:* ${cliente?.nombre || ""} · Cód: ${cliente?.codigo || ""}`,
+      ...(cliente?.razon_social ? [`🏬 *Razón social:* ${cliente.razon_social}`] : []),
+      `📍 *Municipio:* ${cliente?.municipio || ""}`,
+      `👤 *Vendedor:* ${vendedor?.nombre || ""}`,
+      `📅 *Fecha:* ${fecha} · ${hora}`,
+      ``,
+      `*PRODUCTOS:*`,
+      lineas,
+      ``,
+      `💰 *TOTAL: $${(pedido.total || 0).toLocaleString("es-CO")}*`,
+      pedido.observaciones ? `\n📝 ${pedido.observaciones}` : "",
+    ].join("\n").trim()
+    window.open(`https://wa.me/${config.whatsapp_numero}?text=${encodeURIComponent(msg)}`, "_blank")
+  }
+
   async function cambiarEstado(id: string, estado: string) {
     setMsgEstado(""); setErrorEstado("")
+    const pedido = pedidos.find(p => p.id === id)
     const { error } = await supabase.from("pedidos").update({ estado }).eq("id", id)
     if (error) {
       setErrorEstado("No se pudo cambiar el estado: " + error.message)
       return
     }
+    // Al confirmar, abrir WhatsApp automáticamente
+    if (estado === "confirmado" && pedido) abrirWhatsApp(pedido)
     await load()
     if (detalle?.id === id) setDetalle(d => d ? { ...d, estado: estado as Pedido["estado"] } : d)
     setMsgEstado(`✓ Pedido marcado como ${estado}.`)
@@ -239,7 +277,7 @@ export default function PedidosPage() {
                           <button onClick={() => router.push(`/pedidos/nuevo?id=${p.id}`)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Editar</button>}
                         {p.estado === "borrador" && <button onClick={() => cambiarEstado(p.id, "confirmado")} style={{ padding: "5px 10px", background: "rgba(59,130,246,0.15)", color: "#3b82f6", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Confirmar</button>}
                         {isAdmin && p.estado === "confirmado" && <button onClick={() => cambiarEstado(p.id, "entregado")} style={{ padding: "5px 10px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Entregar</button>}
-                        {(p.estado === "borrador" || p.estado === "confirmado") && <button onClick={() => cambiarEstado(p.id, "cancelado")} style={{ padding: "5px 10px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Cancelar</button>}
+                        {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) && <button onClick={() => cambiarEstado(p.id, "cancelado")} style={{ padding: "5px 10px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Cancelar</button>}
                         {(p.estado === "borrador" || isAdmin) && <button onClick={() => eliminar(p.id)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.muted, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Eliminar</button>}
                       </div>
                     </td>
@@ -300,7 +338,7 @@ export default function PedidosPage() {
                 {isAdmin && detalle.estado === "confirmado" && (
                   <button onClick={() => cambiarEstado(detalle.id, "entregado")} style={{ padding: "9px 16px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer" }}>Entregar</button>
                 )}
-                {(detalle.estado === "borrador" || detalle.estado === "confirmado") && (
+                {(detalle.estado === "borrador" || (isAdmin && detalle.estado === "confirmado")) && (
                   <button onClick={() => cambiarEstado(detalle.id, "cancelado")} style={{ padding: "9px 16px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer" }}>Cancelar</button>
                 )}
                 <button onClick={() => setDetalle(null)} style={{ padding: "9px 20px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Cerrar</button>
