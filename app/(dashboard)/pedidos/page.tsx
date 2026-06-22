@@ -291,9 +291,20 @@ export default function PedidosPage() {
                 </tbody>
               </table>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
               <span style={{ fontSize: "17px", fontWeight: "bold", color: theme.text }}>Total: ${detalle.total.toLocaleString("es-CO")}</span>
-              <button onClick={() => setDetalle(null)} style={{ padding: "9px 20px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Cerrar</button>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {detalle.estado === "borrador" && (
+                  <button onClick={() => cambiarEstado(detalle.id, "confirmado")} style={{ padding: "9px 16px", background: "rgba(59,130,246,0.15)", color: "#3b82f6", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer" }}>Confirmar</button>
+                )}
+                {isAdmin && detalle.estado === "confirmado" && (
+                  <button onClick={() => cambiarEstado(detalle.id, "entregado")} style={{ padding: "9px 16px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer" }}>Entregar</button>
+                )}
+                {(detalle.estado === "borrador" || detalle.estado === "confirmado") && (
+                  <button onClick={() => cambiarEstado(detalle.id, "cancelado")} style={{ padding: "9px 16px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer" }}>Cancelar</button>
+                )}
+                <button onClick={() => setDetalle(null)} style={{ padding: "9px 20px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Cerrar</button>
+              </div>
             </div>
           </div>
         </div>
