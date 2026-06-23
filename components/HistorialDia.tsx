@@ -16,10 +16,21 @@ interface PedidoDia {
   cliente?: { nombre: string } | { nombre: string }[]
   usuario?: { nombre: string } | { nombre: string }[]
   usuario_id: string
+  items?: { cantidad: number; precio_unitario: number; producto?: { iva: number } | { iva: number }[] }[]
 }
 
 function rel<T>(v: T | T[] | undefined): T | undefined {
   return Array.isArray(v) ? v[0] : v
+}
+
+// Calcula el valor sin IVA de un pedido a partir del IVA de cada producto
+function sinIvaDePedido(p: PedidoDia): number {
+  if (!p.items || p.items.length === 0) return p.total || 0
+  return p.items.reduce((acc, it) => {
+    const prod = rel(it.producto)
+    const iva = prod?.iva || 0
+    return acc + (it.cantidad * it.precio_unitario) / (1 + iva / 100)
+  }, 0)
 }
 
 export default function HistorialDia() {
@@ -40,7 +51,7 @@ export default function HistorialDia() {
     const fin = fecha + "T23:59:59-05:00"
     let q = supabase
       .from("pedidos")
-      .select("id, total, estado, created_at, usuario_id, cliente:clientes(nombre), usuario:usuarios(nombre)")
+      .select("id, total, estado, created_at, usuario_id, cliente:clientes(nombre), usuario:usuarios(nombre), items:pedido_items(cantidad, precio_unitario, producto:productos(iva))")
       .gte("created_at", ini).lte("created_at", fin)
       .in("estado", ["confirmado", "entregado"])
       .order("created_at", { ascending: false })
@@ -51,16 +62,18 @@ export default function HistorialDia() {
   }
 
   const totalDia = pedidos.reduce((s, p) => s + (p.total || 0), 0)
+  const totalDiaSinIva = pedidos.reduce((s, p) => s + sinIvaDePedido(p), 0)
 
   // Desglose por vendedor (admin)
   const porVendedor = Object.values(
     pedidos.reduce((acc, p) => {
       const nombre = rel(p.usuario)?.nombre || "Sin vendedor"
-      if (!acc[nombre]) acc[nombre] = { nombre, cantidad: 0, total: 0 }
+      if (!acc[nombre]) acc[nombre] = { nombre, cantidad: 0, total: 0, sinIva: 0 }
       acc[nombre].cantidad++
       acc[nombre].total += p.total || 0
+      acc[nombre].sinIva += sinIvaDePedido(p)
       return acc
-    }, {} as Record<string, { nombre: string; cantidad: number; total: number }>)
+    }, {} as Record<string, { nombre: string; cantidad: number; total: number; sinIva: number }>)
   ).sort((a, b) => b.total - a.total)
 
   const esHoy = fecha === hoyCol()
@@ -85,17 +98,19 @@ export default function HistorialDia() {
         <p style={{ fontSize: "11px", fontWeight: 700, opacity: 0.7, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 6px" }}>
           {isAdmin ? "Total del día" : "Hiciste este día"} {esHoy ? "(hoy)" : ""}
         </p>
-        <p style={{ fontSize: "28px", fontWeight: 800, margin: "0 0 2px" }}>${totalDia.toLocaleString("es-CO")}</p>
+        <p style={{ fontSize: "28px", fontWeight: 800, margin: "0 0 2px" }}>${Math.round(totalDia).toLocaleString("es-CO")} <span style={{ fontSize: "13px", fontWeight: 600, opacity: 0.7 }}>con IVA</span></p>
+        <p style={{ fontSize: "17px", fontWeight: 700, margin: "0 0 4px", color: "#7dd3a8" }}>${Math.round(totalDiaSinIva).toLocaleString("es-CO")} <span style={{ fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>sin IVA (para comisión)</span></p>
         <p style={{ fontSize: "12px", opacity: 0.7, margin: 0 }}>{pedidos.length} pedido{pedidos.length !== 1 ? "s" : ""}</p>
       </div>
 
       {/* Por vendedor (solo admin) */}
       {isAdmin && porVendedor.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: "8px", marginBottom: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px", marginBottom: "12px" }}>
           {porVendedor.map(v => (
             <div key={v.nombre} style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, borderRadius: "10px", padding: "10px 12px" }}>
               <p style={{ fontSize: "13px", fontWeight: 700, color: theme.text, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nombre}</p>
-              <p style={{ fontSize: "16px", fontWeight: 800, color: "#16a34a", margin: "0 0 1px" }}>${v.total.toLocaleString("es-CO")}</p>
+              <p style={{ fontSize: "16px", fontWeight: 800, color: theme.text, margin: "0 0 1px" }}>${Math.round(v.total).toLocaleString("es-CO")} <span style={{ fontSize: "10px", fontWeight: 600, color: theme.muted }}>c/IVA</span></p>
+              <p style={{ fontSize: "14px", fontWeight: 700, color: "#16a34a", margin: "0 0 1px" }}>${Math.round(v.sinIva).toLocaleString("es-CO")} <span style={{ fontSize: "10px", fontWeight: 600, color: theme.muted }}>sin IVA</span></p>
               <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{v.cantidad} pedido{v.cantidad !== 1 ? "s" : ""}</p>
             </div>
           ))}
