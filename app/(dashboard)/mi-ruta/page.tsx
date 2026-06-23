@@ -28,6 +28,7 @@ export default function MiRutaPage() {
   const [visitas, setVisitas] = useState<Record<string, Visita>>({})
   const [compraron, setCompraron] = useState<Set<string>>(new Set())
   const [rutaNombre, setRutaNombre] = useState("")
+  const [rutaId, setRutaId] = useState<string | null>(null)
   const [sinRuta, setSinRuta] = useState("")
   const [cerrada, setCerrada] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -60,6 +61,7 @@ export default function MiRutaPage() {
 
     const rel = (v: any) => Array.isArray(v) ? v[0] : v
     setRutaNombre(rel(asig.ruta)?.nombre || "")
+    setRutaId(asig.ruta_id)
 
     // Clientes de la ruta
     const acumulado: ClienteRuta[] = []
@@ -106,12 +108,22 @@ export default function MiRutaPage() {
   async function marcar(clienteId: string, resultado: string, observacion = "") {
     if (cerrada) return
     setError(""); setMsg("")
-    const user = session!
+    const user = session
+    if (!user?.id) { alert("No se pudo identificar tu sesión. Vuelve a iniciar sesión."); return }
     const fecha = hoyCol()
-    const { error: err } = await supabase.from("visitas").upsert({
-      cliente_id: clienteId, usuario_id: user.id, fecha, resultado, observacion: observacion || null,
-    }, { onConflict: "cliente_id,usuario_id,fecha" })
-    if (err) { setError("No se pudo guardar: " + err.message); return }
+    const yaExiste = !!visitas[clienteId]
+    let err
+    if (yaExiste) {
+      const r = await supabase.from("visitas")
+        .update({ resultado, observacion: observacion || null })
+        .eq("cliente_id", clienteId).eq("usuario_id", user.id).eq("fecha", fecha)
+      err = r.error
+    } else {
+      const r = await supabase.from("visitas")
+        .insert({ cliente_id: clienteId, usuario_id: user.id, ruta_id: rutaId, fecha, resultado, observacion: observacion || null })
+      err = r.error
+    }
+    if (err) { setError("No se pudo guardar: " + err.message); alert("No se pudo guardar: " + err.message); return }
     setVisitas(prev => ({ ...prev, [clienteId]: { cliente_id: clienteId, resultado, observacion } }))
     setOtroAbierto(null); setOtroTexto("")
   }
@@ -135,9 +147,9 @@ export default function MiRutaPage() {
 
     // Marcar como no_visitado los que quedaron sin marcar
     if (sinMarcar.length > 0) {
-      const filas = sinMarcar.map(c => ({ cliente_id: c.id, usuario_id: user.id, fecha, resultado: "no_visitado", observacion: null }))
-      const { error: err } = await supabase.from("visitas").upsert(filas, { onConflict: "cliente_id,usuario_id,fecha" })
-      if (err) { setError("No se pudo cerrar la ruta: " + err.message); return }
+      const filas = sinMarcar.map(c => ({ cliente_id: c.id, usuario_id: user.id, ruta_id: rutaId, fecha, resultado: "no_visitado", observacion: null }))
+      const { error: err } = await supabase.from("visitas").insert(filas)
+      if (err) { setError("No se pudo cerrar la ruta: " + err.message); alert("No se pudo cerrar la ruta: " + err.message); return }
     }
     // Registrar el cierre
     const { error: errC } = await supabase.from("cierres_ruta").insert({ usuario_id: user.id, fecha })
