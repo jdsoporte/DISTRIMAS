@@ -28,6 +28,7 @@ const MENUS_VENDEDOR = [
   { id: "dashboard", label: "Dashboard", href: "/" },
   { id: "nuevo-pedido", label: "Nuevo pedido", href: "/pedidos/nuevo" },
   { id: "mis-pedidos", label: "Mis pedidos", href: "/pedidos" },
+  { id: "mi-ruta", label: "Mi ruta de hoy", href: "/mi-ruta" },
   { section: "Clientes" },
   { id: "clientes", label: "Clientes", href: "/clientes" },
   { section: "Consulta" },
@@ -36,7 +37,7 @@ const MENUS_VENDEDOR = [
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard", "/pedidos": "Pedidos", "/pedidos/nuevo": "Nuevo pedido",
-  "/clientes": "Clientes", "/inventario": "Inventario", "/rutas": "Rutas", "/programacion": "Programación", "/festivos": "Festivos",
+  "/clientes": "Clientes", "/inventario": "Inventario", "/rutas": "Rutas", "/programacion": "Programación", "/festivos": "Festivos", "/mi-ruta": "Mi ruta de hoy",
   "/usuarios": "Usuarios", "/perfiles": "Perfiles y permisos", "/estadisticas": "Estadísticas",
   "/configuraciones": "Configuraciones",
 }
