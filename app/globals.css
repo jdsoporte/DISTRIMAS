@@ -31,6 +31,11 @@ body {
 /* Sidebar responsivo */
 .sidebar-desktop { display: flex !important; }
 
+/* El contenido principal nunca debe desbordar el ancho de la pantalla */
+.main-content { min-width: 0; overflow-x: clip; }
+.page-padding { min-width: 0; max-width: 100%; }
+.tabla-wrap { max-width: 100%; }
+
 @media (max-width: 768px) {
   .main-content { margin-left: 0 !important; }
   .sidebar-desktop { display: none !important; }
