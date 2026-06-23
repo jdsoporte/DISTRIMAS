@@ -208,6 +208,8 @@ export default function NuevoPedidoPage() {
   }
 
   const total = items.reduce((acc, i) => acc + i.cantidad * i.precio_unitario, 0)
+  const totalSinIva = items.reduce((acc, i) => acc + i.cantidad * (i.precio_unitario / (1 + (i.producto.iva || 0) / 100)), 0)
+  const totalIva = total - totalSinIva
 
   async function guardar() {
     if (!clienteId) return setError("Selecciona un cliente")
@@ -458,7 +460,13 @@ export default function NuevoPedidoPage() {
       {/* TOTAL Y BOTONES */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px 20px", flexWrap: "wrap", gap: "16px" }}>
         <div>
-          <p style={{ color: theme.muted, fontSize: "12px", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total del pedido</p>
+          {totalIva > 0 && (
+            <div style={{ marginBottom: "8px" }}>
+              <p style={{ color: theme.muted, fontSize: "13px", margin: "0 0 2px" }}>Subtotal sin IVA: <span style={{ fontWeight: 600, color: theme.text }}>${Math.round(totalSinIva).toLocaleString("es-CO")}</span></p>
+              <p style={{ color: theme.muted, fontSize: "13px", margin: 0 }}>IVA: <span style={{ fontWeight: 600, color: theme.text }}>${Math.round(totalIva).toLocaleString("es-CO")}</span></p>
+            </div>
+          )}
+          <p style={{ color: theme.muted, fontSize: "12px", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total del pedido (con IVA)</p>
           <p style={{ fontSize: "26px", fontWeight: "bold", margin: 0, color: theme.text }}>${total.toLocaleString("es-CO")}</p>
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
