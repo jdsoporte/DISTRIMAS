@@ -152,7 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
 
         {/* Contenido principal */}
-        <main className="main-content" style={{ marginLeft: "260px", flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+        <main className="main-content" style={{ marginLeft: "260px", flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
           <header style={{ height: "60px", background: theme.card, borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", padding: "0 20px", gap: "12px", position: "sticky", top: 0, zIndex: 50 }}>
             {/* Botón hamburguesa solo en móvil */}
             <button className="header-menu-btn" onClick={() => setSidebarOpen(true)}
@@ -163,7 +163,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span style={{ marginLeft: "auto", fontSize: "11px", color: theme.muted, textTransform: "capitalize", display: "block" }}
               className="fecha-hide">{fecha}</span>
           </header>
-          <div className="page-padding" style={{ padding: "24px", flex: 1 }}>{children}</div>
+          <div className="page-padding" style={{ padding: "24px", flex: 1, minWidth: 0 }}>{children}</div>
         </main>
       </div>
     </ThemeContext.Provider>
