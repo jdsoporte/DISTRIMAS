@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme-context"
 import { getSession } from "@/lib/auth"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", activo: true }
+const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, activo: true }
 
 interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number; avisos: string[] }
 
@@ -31,6 +31,9 @@ export default function InventarioPage() {
   const [resumen, setResumen]             = useState<ImportResumen | null>(null)
   const [importError, setImportError]     = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
+  const ivaFileRef = useRef<HTMLInputElement>(null)
+  const [ivaProcesando, setIvaProcesando] = useState(false)
+  const [ivaResumen, setIvaResumen] = useState("")
 
   useEffect(() => {
     load()
@@ -71,13 +74,72 @@ export default function InventarioPage() {
     if (!form.nombre?.trim()) return setError("El nombre es requerido")
     if (!form.codigo?.trim()) return setError("El código es requerido")
     setSaving(true); setError("")
-    const payload = { ...form, precio: Number(form.precio), stock: Number(form.stock), stock_minimo: Number(form.stock_minimo) }
+    const payload = { ...form, precio: Number(form.precio), stock: Number(form.stock), stock_minimo: Number(form.stock_minimo), iva: Number(form.iva) }
     const { error: err } = editando
       ? await supabase.from("productos").update(payload).eq("id", editando)
       : await supabase.from("productos").insert(payload)
     setSaving(false)
     if (err) return setError(err.message)
     cerrar()
+  }
+
+  // Importa un archivo (codigo + IVA) y marca el IVA de cada producto por codigo
+  async function importarIVA(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (ivaFileRef.current) ivaFileRef.current.value = ""
+    if (!file) return
+    setIvaProcesando(true); setIvaResumen("")
+    try {
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+      if (rows.length === 0) { setIvaResumen("El archivo está vacío o no tiene datos."); setIvaProcesando(false); return }
+
+      const col = (r: Record<string, unknown>, ...keys: string[]) => {
+        for (const k of keys) if (r[k] !== undefined && r[k] !== null && r[k] !== "") return r[k]
+        return undefined
+      }
+
+      // Agrupar codigos por su valor de IVA (para actualizar en bloque)
+      const porIva: Record<string, string[]> = {}
+      let sinCodigo = 0, ivaInvalido = 0
+      for (const r of rows) {
+        const codigo = String(col(r, "codigo", "Codigo", "CODIGO", "cod", "Cod", "COD") ?? "").trim()
+        const ivaRaw = col(r, "iva", "Iva", "IVA", "porcentaje", "Porcentaje", "PORCENTAJE", "%")
+        if (!codigo) { sinCodigo++; continue }
+        const iva = Number(ivaRaw ?? 0)
+        if (isNaN(iva)) { ivaInvalido++; continue }
+        ;(porIva[iva] ||= []).push(codigo)
+      }
+
+      if (Object.keys(porIva).length === 0) {
+        setIvaProcesando(false)
+        setIvaResumen("No se encontraron filas válidas. Revisa que el archivo tenga una columna de código y una de IVA.")
+        return
+      }
+
+      let actualizados = 0
+      for (const [iva, codigos] of Object.entries(porIva)) {
+        for (let i = 0; i < codigos.length; i += 400) {
+          const bloque = codigos.slice(i, i + 400)
+          const { count, error: err } = await supabase.from("productos")
+            .update({ iva: Number(iva) }, { count: "exact" }).in("codigo", bloque)
+          if (err) { setIvaProcesando(false); setIvaResumen("Error al actualizar el IVA: " + err.message); return }
+          actualizados += count || 0
+        }
+      }
+
+      setIvaProcesando(false)
+      let txt = `✓ ${actualizados} producto(s) marcados con su IVA.`
+      if (sinCodigo > 0) txt += ` ${sinCodigo} fila(s) sin código se omitieron.`
+      if (ivaInvalido > 0) txt += ` ${ivaInvalido} fila(s) con IVA inválido se omitieron.`
+      setIvaResumen(txt)
+      load()
+    } catch {
+      setIvaProcesando(false)
+      setIvaResumen("No se pudo leer el archivo. Asegúrate de que sea un Excel válido.")
+    }
   }
 
   async function toggleActivo(p: Producto) {
@@ -243,9 +305,15 @@ export default function InventarioPage() {
         <div className="page-header-btns">
           <button onClick={exportarExcel} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Exportar Excel</button>
           <button onClick={descargarPlantilla} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Descargar plantilla</button>
+          {isAdmin && <button onClick={() => ivaFileRef.current?.click()} disabled={ivaProcesando} style={{ padding: "10px 16px", background: "rgba(59,130,246,0.12)", color: "#3b82f6", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: ivaProcesando ? 0.6 : 1 }}>{ivaProcesando ? "Importando IVA..." : "Importar IVA"}</button>}
+          <input ref={ivaFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importarIVA} style={{ display: "none" }} />
           <button onClick={() => abrir()} style={{ padding: "10px 20px", background: "#D72638", color: "white", fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer" }}>+ Producto</button>
         </div>
       </div>
+
+      {ivaResumen && (
+        <div style={{ background: ivaResumen.startsWith("✓") ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)", border: `1px solid ${ivaResumen.startsWith("✓") ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.3)"}`, color: ivaResumen.startsWith("✓") ? "#22c55e" : "#d97706", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "16px" }}>{ivaResumen}</div>
+      )}
 
       {/* Panel importación — solo admin */}
       {isAdmin && (
@@ -413,16 +481,16 @@ export default function InventarioPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "Nombre", "Grupo", "Unidad", "Precio", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
+                {["Código", "Nombre", "Grupo", "Unidad", "Precio", "IVA", "Sin IVA", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
+                <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
+                <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
               ) : filtrados.map(p => {
                 const bajo = p.activo && p.stock < p.stock_minimo
                 return (
@@ -432,6 +500,10 @@ export default function InventarioPage() {
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{p.grupo}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{p.unidad}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 600, color: theme.text }}>${p.precio.toLocaleString("es-CO")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "13px" }}>
+                      <span style={{ padding: "2px 8px", borderRadius: "99px", fontSize: "12px", fontWeight: 600, background: (p.iva || 0) > 0 ? "rgba(59,130,246,0.12)" : theme.cardAlt, color: (p.iva || 0) > 0 ? "#3b82f6" : theme.muted }}>{p.iva || 0}%</span>
+                    </td>
+                    <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>${Math.round(p.precio / (1 + (p.iva || 0) / 100)).toLocaleString("es-CO")}</td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{ fontWeight: "bold", fontSize: "15px", color: bajo ? "#f59e0b" : "#22c55e" }}>{p.stock}</span>
                     </td>
@@ -475,8 +547,24 @@ export default function InventarioPage() {
                     {["Und", "Cja", "Blt", "Kg", "Lt", "Par"].map(u => <option key={u}>{u}</option>)}
                   </select>
                 </div>
-                <div><label style={lbl}>Precio</label><input style={inp} type="number" value={form.precio} onChange={e => f("precio", e.target.value)} min={0} /></div>
+                <div><label style={lbl}>Precio (con IVA)</label><input style={inp} type="number" value={form.precio} onChange={e => f("precio", e.target.value)} min={0} /></div>
                 <div><label style={lbl}>Stock actual</label><input style={inp} type="number" value={form.stock} onChange={e => f("stock", e.target.value)} min={0} /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={lbl}>IVA</label>
+                  <select style={{ ...inp, cursor: "pointer" }} value={form.iva} onChange={e => f("iva", e.target.value)}>
+                    <option value={0}>Sin IVA (0%)</option>
+                    <option value={5}>5%</option>
+                    <option value={19}>19%</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Precio sin IVA</label>
+                  <div style={{ ...inp, background: theme.card, color: theme.muted, display: "flex", alignItems: "center" }}>
+                    ${Math.round(Number(form.precio || 0) / (1 + Number(form.iva || 0) / 100)).toLocaleString("es-CO")}
+                  </div>
+                </div>
               </div>
               <div><label style={lbl}>Stock mínimo</label><input style={inp} type="number" value={form.stock_minimo} onChange={e => f("stock_minimo", e.target.value)} min={0} /></div>
               <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", cursor: "pointer", color: theme.text }}>
