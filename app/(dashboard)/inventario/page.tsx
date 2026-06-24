@@ -37,10 +37,12 @@ export default function InventarioPage() {
 
   useEffect(() => {
     load()
+    let t: ReturnType<typeof setTimeout> | undefined
+    const recargarAgrupado = () => { if (t) clearTimeout(t); t = setTimeout(load, 800) }
     const canal = supabase.channel("inventario-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, recargarAgrupado)
       .subscribe()
-    return () => { supabase.removeChannel(canal) }
+    return () => { if (t) clearTimeout(t); supabase.removeChannel(canal) }
   }, [])
 
   async function load() {
@@ -54,6 +56,8 @@ export default function InventarioPage() {
         .range(desde, desde + TAM - 1)
       if (error || !data || data.length === 0) break
       todos = todos.concat(data)
+      setProductos([...todos]) // mostramos lo que va llegando
+      setLoading(false)        // quitamos "Cargando" apenas llega el primer bloque
       if (data.length < TAM) break
       desde += TAM
     }
