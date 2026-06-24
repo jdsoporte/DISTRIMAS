@@ -51,7 +51,7 @@ export async function leerDato<T>(clave: string): Promise<T | null> {
 // ----- Cola de pendientes (outbox) -----
 export interface Pendiente {
   id: string          // uuid generado en el celular (para no duplicar al enviar)
-  tipo: "pedido" | "visita" | "cierre"
+  tipo: "pedido" | "visita" | "cierre" | "ubicacion"
   payload: unknown    // datos a enviar
   creado: string      // fecha ISO
 }
