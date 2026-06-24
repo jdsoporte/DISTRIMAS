@@ -35,6 +35,7 @@ export default function NuevoPedidoPage() {
   const [rutaFiltro, setRutaFiltro] = useState<string>("todas")
   const [infoRutaHoy, setInfoRutaHoy] = useState("")
   const [rutaFestivo, setRutaFestivo] = useState<{ id: string; nombre: string } | null>(null)
+  const [festivoHoy, setFestivoHoy] = useState(false)
   const [rutaHoyId, setRutaHoyId] = useState<string>("")
 
   useEffect(() => {
@@ -102,6 +103,11 @@ export default function NuevoPedidoPage() {
     const ahoraCol = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
     const diaCol = ahoraCol.getDay()
     const quincenaHoy = ahoraCol.getDate() <= 15 ? 1 : 2
+
+    // ¿Hoy es festivo? Solo para mostrar el aviso (no cambia nada más)
+    const hoyStr = `${ahoraCol.getFullYear()}-${String(ahoraCol.getMonth() + 1).padStart(2, "0")}-${String(ahoraCol.getDate()).padStart(2, "0")}`
+    const { data: festHoy } = await supabase.from("festivos").select("fecha").eq("fecha", hoyStr).maybeSingle()
+    setFestivoHoy(!!festHoy)
 
     if (diaCol === 0) {
       setInfoRutaHoy("Hoy es domingo, no hay ruta programada. Puedes ver todos los clientes.")
@@ -326,6 +332,13 @@ export default function NuevoPedidoPage() {
       {/* CLIENTE */}
       <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "14px" }}>
         <p style={{ fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 10px" }}>Cliente</p>
+
+        {/* Aviso de festivo de hoy */}
+        {festivoHoy && (
+          <div style={{ background: "rgba(215,38,56,0.1)", border: "1px solid rgba(215,38,56,0.3)", borderRadius: "10px", padding: "10px 14px", marginBottom: "12px" }}>
+            <p style={{ fontSize: "14px", fontWeight: 700, color: "#D72638", margin: 0 }}>Hoy es festivo</p>
+          </div>
+        )}
 
         {/* Panel de la ruta de hoy (solo vendedores) */}
         {infoRutaHoy && (
