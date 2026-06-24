@@ -94,13 +94,20 @@ export default function HistorialDia() {
       </div>
 
       {/* Total del día */}
-      <div style={{ background: "#0f1f3d", borderRadius: "12px", padding: "16px 18px", color: "white", marginBottom: porVendedor.length > 0 && isAdmin ? "12px" : "0" }}>
-        <p style={{ fontSize: "11px", fontWeight: 700, opacity: 0.7, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 6px" }}>
-          {isAdmin ? "Total del día" : "Hiciste este día"} {esHoy ? "(hoy)" : ""}
-        </p>
-        <p style={{ fontSize: "28px", fontWeight: 800, margin: "0 0 2px" }}>${Math.round(totalDia).toLocaleString("es-CO")} <span style={{ fontSize: "13px", fontWeight: 600, opacity: 0.7 }}>con IVA</span></p>
-        <p style={{ fontSize: "17px", fontWeight: 700, margin: "0 0 4px", color: "#7dd3a8" }}>${Math.round(totalDiaSinIva).toLocaleString("es-CO")} <span style={{ fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>sin IVA (para comisión)</span></p>
-        <p style={{ fontSize: "12px", opacity: 0.7, margin: 0 }}>{pedidos.length} pedido{pedidos.length !== 1 ? "s" : ""}</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "24px", alignItems: "flex-end", background: theme.cardAlt, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px 20px", marginBottom: porVendedor.length > 0 && isAdmin ? "12px" : "0" }}>
+        <div>
+          <p style={{ fontSize: "11px", fontWeight: 700, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 4px" }}>
+            Total con IVA {esHoy ? "(hoy)" : ""}
+          </p>
+          <p style={{ fontSize: "26px", fontWeight: 800, color: theme.text, margin: 0 }}>${Math.round(totalDia).toLocaleString("es-CO")}</p>
+        </div>
+        <div style={{ borderLeft: `1px solid ${theme.border}`, paddingLeft: "24px" }}>
+          <p style={{ fontSize: "11px", fontWeight: 700, color: "#D72638", textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 4px" }}>
+            Total sin IVA (base para comisiones)
+          </p>
+          <p style={{ fontSize: "26px", fontWeight: 800, color: "#D72638", margin: 0 }}>${Math.round(totalDiaSinIva).toLocaleString("es-CO")}</p>
+        </div>
+        <p style={{ fontSize: "12px", color: theme.muted, margin: 0, marginLeft: "auto" }}>{pedidos.length} pedido{pedidos.length !== 1 ? "s" : ""}</p>
       </div>
 
       {/* Por vendedor (solo admin) */}
@@ -110,7 +117,7 @@ export default function HistorialDia() {
             <div key={v.nombre} style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, borderRadius: "10px", padding: "10px 12px" }}>
               <p style={{ fontSize: "13px", fontWeight: 700, color: theme.text, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nombre}</p>
               <p style={{ fontSize: "16px", fontWeight: 800, color: theme.text, margin: "0 0 1px" }}>${Math.round(v.total).toLocaleString("es-CO")} <span style={{ fontSize: "10px", fontWeight: 600, color: theme.muted }}>c/IVA</span></p>
-              <p style={{ fontSize: "14px", fontWeight: 700, color: "#16a34a", margin: "0 0 1px" }}>${Math.round(v.sinIva).toLocaleString("es-CO")} <span style={{ fontSize: "10px", fontWeight: 600, color: theme.muted }}>sin IVA</span></p>
+              <p style={{ fontSize: "14px", fontWeight: 700, color: "#D72638", margin: "0 0 1px" }}>${Math.round(v.sinIva).toLocaleString("es-CO")} <span style={{ fontSize: "10px", fontWeight: 600, color: theme.muted }}>sin IVA</span></p>
               <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{v.cantidad} pedido{v.cantidad !== 1 ? "s" : ""}</p>
             </div>
           ))}
