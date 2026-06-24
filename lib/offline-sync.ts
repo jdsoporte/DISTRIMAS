@@ -41,7 +41,7 @@ export async function descargarParaOffline(userId: string): Promise<boolean> {
     if (asig?.ruta_id) {
       clientes = await traerTodo(
         "clientes",
-        "id, codigo, nombre, razon_social, nit, municipio, direccion, telefono, ruta_id",
+        "id, codigo, nombre, razon_social, nit, municipio, direccion, telefono, ruta_id, latitud, longitud",
         (q) => q.eq("ruta_id", asig.ruta_id).order("nombre")
       )
     }
@@ -96,6 +96,14 @@ export async function enviarPendientes(): Promise<number> {
         enviados++
       } else if (p.tipo === "cierre") {
         const { error } = await supabase.from("cierres_ruta").upsert(p.payload as any, { onConflict: "usuario_id,fecha" })
+        if (error) continue
+        await quitarPendiente(p.id)
+        enviados++
+      } else if (p.tipo === "ubicacion") {
+        const u = p.payload as { id: string; latitud: number; longitud: number; ubicacion_fecha: string }
+        const { error } = await supabase.from("clientes")
+          .update({ latitud: u.latitud, longitud: u.longitud, ubicacion_fecha: u.ubicacion_fecha })
+          .eq("id", u.id)
         if (error) continue
         await quitarPendiente(p.id)
         enviados++
