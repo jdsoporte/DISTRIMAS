@@ -90,7 +90,12 @@ export async function enviarPendientes(): Promise<number> {
         await quitarPendiente(p.id)
         enviados++
       } else if (p.tipo === "visita") {
-        const { error } = await supabase.from("visitas").upsert(p.payload as any)
+        const { error } = await supabase.from("visitas").upsert(p.payload as any, { onConflict: "cliente_id,usuario_id,fecha" })
+        if (error) continue
+        await quitarPendiente(p.id)
+        enviados++
+      } else if (p.tipo === "cierre") {
+        const { error } = await supabase.from("cierres_ruta").upsert(p.payload as any, { onConflict: "usuario_id,fecha" })
         if (error) continue
         await quitarPendiente(p.id)
         enviados++
@@ -100,4 +105,4 @@ export async function enviarPendientes(): Promise<number> {
     }
   }
   return enviados
-                              }
+}
