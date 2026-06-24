@@ -31,15 +31,23 @@ export default function RutasPage() {
     setLoading(true)
     const { data } = await supabase.from("rutas").select("*").order("nombre")
     setRutas(data || [])
-    // Contar cuantos clientes tiene cada ruta
+    setLoading(false) // mostramos las rutas de una vez, sin esperar el conteo
+
+    // Contar clientes por ruta en UNA sola pasada (mucho más rápido que una consulta por ruta)
     const mapa: Record<string, number> = {}
-    for (const r of data || []) {
-      const { count } = await supabase
-        .from("clientes").select("id", { count: "exact", head: true }).eq("ruta_id", r.id)
-      mapa[r.id] = count || 0
+    let desde = 0
+    const TAM = 1000
+    while (true) {
+      const { data: cli, error } = await supabase
+        .from("clientes").select("ruta_id").range(desde, desde + TAM - 1)
+      if (error || !cli || cli.length === 0) break
+      for (const c of cli) {
+        if (c.ruta_id) mapa[c.ruta_id] = (mapa[c.ruta_id] || 0) + 1
+      }
+      if (cli.length < TAM) break
+      desde += TAM
     }
     setConteos(mapa)
-    setLoading(false)
   }
 
   function abrir(r?: Ruta) {
