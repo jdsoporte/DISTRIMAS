@@ -12,7 +12,26 @@ import {
   PieChart, Pie, Cell,
 } from "recharts"
 
-const COLORS = ["#D72638", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7"]
+const COLORS = ["#D72638", "#8E1B25", "#e05c68", "#b71c2a", "#f0989f"]
+
+// Íconos de línea (estilo minimalista, sin emojis)
+function Ico({ name, color = "#D72638", size = 18 }: { name: string; color?: string; size?: number }) {
+  const p: Record<string, React.ReactNode> = {
+    cart: <><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></>,
+    money: <><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></>,
+    store: <><path d="M3 9l1.5-5h15L21 9" /><path d="M4 9v11h16V9" /><path d="M9 20v-6h6v6" /></>,
+    trophy: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></>,
+    bars: <><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" /></>,
+    pie: <><path d="M21.21 15.89A10 10 0 1 1 8 2.83" /><path d="M22 12A10 10 0 0 0 12 2v10z" /></>,
+    clock: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
+    alert: <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>,
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {p[name]}
+    </svg>
+  )
+}
 
 interface TopItem  { nombre: string; total: number; cantidad: number }
 interface DiaItem  { dia: string; pedidos: number }
@@ -175,9 +194,8 @@ export default function DashboardPage() {
     ? null
     : Math.round(((stats.pedidosHoy - stats.pedidosAyer) / stats.pedidosAyer) * 100)
 
-  const rankingIcon  = stats.miRanking === 1 ? "🏆" : stats.miRanking === 2 ? "🥈" : stats.miRanking === 3 ? "🥉" : "📊"
   const rankingLabel = stats.miRanking === 0 ? "Sin ventas aún" : `${stats.miRanking}° del mes`
-  const rankingColor = stats.miRanking === 1 ? "#D72638" : stats.miRanking === 2 ? "#6B7280" : stats.miRanking === 3 ? "#d97706" : "#3b82f6"
+  const rankingColor = stats.miRanking === 1 ? "#D72638" : stats.miRanking === 2 ? "#6B7280" : stats.miRanking === 3 ? "#d97706" : "#D72638"
 
   const card = {
     background: theme.card,
@@ -233,17 +251,17 @@ export default function DashboardPage() {
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: "14px", fontWeight: 700, margin: "0 0 10px", color: alertaStock.agotados.length > 0 ? "#D72638" : "#d97706" }}>
-                {alertaStock.agotados.length > 0 ? "🚨 Productos agotados y con stock bajo" : "⚠️ Productos con stock bajo"}
+                {alertaStock.agotados.length > 0 ? "Productos agotados y con stock bajo" : "Productos con stock bajo"}
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {alertaStock.agotados.map((p: any) => (
                   <span key={p.id} style={{ padding: "4px 10px", background: "rgba(215,38,56,0.12)", color: "#D72638", borderRadius: "99px", fontSize: "12px", fontWeight: 600 }}>
-                    🔴 {p.nombre} — AGOTADO
+                    {p.nombre} — AGOTADO
                   </span>
                 ))}
                 {alertaStock.bajos.map((p: any) => (
                   <span key={p.id} style={{ padding: "4px 10px", background: "rgba(245,158,11,0.12)", color: "#d97706", borderRadius: "99px", fontSize: "12px", fontWeight: 600 }}>
-                    🟡 {p.nombre} — {p.stock} uds.
+                    {p.nombre} — {p.stock} uds.
                   </span>
                 ))}
               </div>
@@ -256,20 +274,14 @@ export default function DashboardPage() {
       {/* Saludo */}
       <div>
         <h2 style={{ fontSize: "22px", fontWeight: "bold", margin: "0 0 4px", color: theme.text }}>
-          Hola, {user?.nombre?.split(" ")[0]} 👋
+          Hola, {user?.nombre?.split(" ")[0]}
         </h2>
         <p style={{ color: theme.muted, fontSize: "13px", margin: 0 }}>
           {isAdmin ? "Resumen general del sistema" : "Tu resumen personal del mes"}
         </p>
       </div>
 
-      {/* Mapa de ubicación de vendedores (solo admin) */}
-      {isAdmin && <MapaVendedores />}
-
-      {/* Control de visitas por vendedor (solo admin) */}
-      {isAdmin && <ReporteVisitas />}
-
-      {/* Historial de ventas por día (admin y vendedor) */}
+      {/* Ventas del día (admin y vendedor) */}
       <HistorialDia />
 
       {/* ── TARJETAS ── */}
@@ -281,7 +293,7 @@ export default function DashboardPage() {
             <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>
               {isAdmin ? "Pedidos hoy" : "Mis pedidos hoy"}
             </p>
-            <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(215,38,56,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>📦</div>
+            <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(215,38,56,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}><Ico name="cart" /></div>
           </div>
           <p style={{ fontSize: "32px", fontWeight: "bold", margin: "0 0 6px", color: theme.text }}>{stats.pedidosHoy}</p>
           {pctVsAyer !== null && (
@@ -298,7 +310,7 @@ export default function DashboardPage() {
             <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>
               {isAdmin ? "Ventas del mes" : "Mis ventas del mes"}
             </p>
-            <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(34,197,94,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>💰</div>
+            <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(215,38,56,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}><Ico name="money" /></div>
           </div>
           <p style={{ fontSize: "22px", fontWeight: "bold", margin: "0 0 6px", color: theme.text }}>${stats.ventasMes.toLocaleString("es-CO")}</p>
           {!isAdmin && (
@@ -314,7 +326,7 @@ export default function DashboardPage() {
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
               <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>Tiendas activas</p>
-              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(59,130,246,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>🏪</div>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(215,38,56,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}><Ico name="store" /></div>
             </div>
             <p style={{ fontSize: "32px", fontWeight: "bold", margin: "0 0 6px", color: theme.text }}>{stats.tiendasActivas}</p>
             <p style={{ fontSize: "12px", margin: 0, color: theme.muted }}>Clientes habilitados</p>
@@ -323,7 +335,7 @@ export default function DashboardPage() {
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
               <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>Tiendas visitadas</p>
-              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(59,130,246,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>🏪</div>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(215,38,56,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}><Ico name="store" /></div>
             </div>
             <p style={{ fontSize: "32px", fontWeight: "bold", margin: "0 0 6px", color: theme.text }}>{stats.tiendasVisitadas}</p>
             <p style={{ fontSize: "12px", margin: 0, color: theme.muted }}>
@@ -337,7 +349,7 @@ export default function DashboardPage() {
           <div style={{ ...card, border: stats.stockBajo > 0 ? "1px solid rgba(215,38,56,0.4)" : `1px solid ${theme.border}` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
               <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>Stock bajo</p>
-              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: stats.stockBajo > 0 ? "rgba(215,38,56,0.12)" : "rgba(245,158,11,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>⚠️</div>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: stats.stockBajo > 0 ? "rgba(215,38,56,0.12)" : "rgba(245,158,11,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}><Ico name="alert" /></div>
             </div>
             <p style={{ fontSize: "32px", fontWeight: "bold", margin: "0 0 6px", color: stats.stockBajo > 0 ? "#D72638" : theme.text }}>{stats.stockBajo}</p>
             <p style={{ fontSize: "12px", margin: 0, color: stats.stockBajo > 0 ? "#D72638" : theme.muted, fontWeight: stats.stockBajo > 0 ? 600 : 400 }}>
@@ -348,7 +360,7 @@ export default function DashboardPage() {
           <div style={{ ...card, border: `1px solid ${rankingColor}40` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
               <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>Mi puesto</p>
-              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `${rankingColor}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>{rankingIcon}</div>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `${rankingColor}18`, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico name="trophy" color={rankingColor} /></div>
             </div>
             <p style={{ fontSize: "28px", fontWeight: "bold", margin: "0 0 6px", color: rankingColor }}>{rankingLabel}</p>
             <p style={{ fontSize: "12px", margin: 0, color: theme.muted }}>
@@ -362,12 +374,18 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Control de visitas por vendedor (solo admin) */}
+      {isAdmin && <ReporteVisitas />}
+
+      {/* Mapa de ubicación de vendedores (solo admin) */}
+      {isAdmin && <MapaVendedores />}
+
       {/* ── FILA MEDIA ── */}
       <div className="dash-mid">
 
         {/* Bar chart — filtrado por vendedor */}
         <div style={card}>
-          <p style={sectionTitle}>📊 {isAdmin ? "Pedidos" : "Mis pedidos"} — últimos 30 días</p>
+          <p style={sectionTitle}>{isAdmin ? "Pedidos" : "Mis pedidos"} — últimos 30 días</p>
           {diasData.every(d => d.pedidos === 0) ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin pedidos en este período</p>
           ) : (
@@ -384,7 +402,7 @@ export default function DashboardPage() {
 
         {/* Top vendedores — admin: ranking general | vendedor: ranking con su fila resaltada */}
         <div style={card}>
-          <p style={sectionTitle}>🏆 {isAdmin ? "Top vendedores del mes" : "Ranking del mes"}</p>
+          <p style={sectionTitle}>{isAdmin ? "Top vendedores del mes" : "Ranking del mes"}</p>
           {topVendedores.length === 0 ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin datos este mes</p>
           ) : (
@@ -399,7 +417,7 @@ export default function DashboardPage() {
                     border: esMio ? "1px solid rgba(215,38,56,0.2)" : "none",
                     margin: esMio ? "-6px -8px" : "0",
                   }}>
-                    <span style={{ width: "26px", height: "26px", borderRadius: "50%", background: i === 0 ? "#D72638" : i === 1 ? "#f59e0b" : i === 2 ? "#3b82f6" : theme.cardAlt, color: i < 3 ? "white" : theme.muted, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>
+                    <span style={{ width: "26px", height: "26px", borderRadius: "50%", background: i === 0 ? "#D72638" : i === 1 ? "#f59e0b" : i === 2 ? "#D72638" : theme.cardAlt, color: i < 3 ? "white" : theme.muted, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", flexShrink: 0 }}>
                       {i + 1}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -427,7 +445,7 @@ export default function DashboardPage() {
 
         {/* Top productos */}
         <div style={card}>
-          <p style={sectionTitle}>🥧 {isAdmin ? "Top productos del mes" : "Mis top productos"}</p>
+          <p style={sectionTitle}>{isAdmin ? "Top productos del mes" : "Mis top productos"}</p>
           {topProductos.length === 0 ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin datos este mes</p>
           ) : (
@@ -455,7 +473,7 @@ export default function DashboardPage() {
 
         {/* Top tiendas */}
         <div style={card}>
-          <p style={sectionTitle}>🏪 {isAdmin ? "Top tiendas del mes" : "Mis top tiendas"}</p>
+          <p style={sectionTitle}>{isAdmin ? "Top tiendas del mes" : "Mis top tiendas"}</p>
           {topTiendas.length === 0 ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin datos</p>
           ) : (
@@ -475,13 +493,13 @@ export default function DashboardPage() {
 
         {/* Últimos pedidos */}
         <div style={card}>
-          <p style={sectionTitle}>🕐 {isAdmin ? "Últimos pedidos" : "Mis últimos pedidos"}</p>
+          <p style={sectionTitle}>{isAdmin ? "Últimos pedidos" : "Mis últimos pedidos"}</p>
           {recientes.length === 0 ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin pedidos recientes</p>
           ) : (
             <div style={{ display: "grid", gap: "10px" }}>
               {recientes.map((p: any) => {
-                const col = { borrador: "#6B7280", confirmado: "#3b82f6", entregado: "#16a34a", cancelado: "#D72638" }[p.estado as string] || "#6B7280"
+                const col = { borrador: "#6B7280", confirmado: "#D72638", entregado: "#16a34a", cancelado: "#D72638" }[p.estado as string] || "#6B7280"
                 return (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: col, flexShrink: 0 }} />
