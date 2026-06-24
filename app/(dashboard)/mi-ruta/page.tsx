@@ -16,7 +16,7 @@ const ETIQUETA: Record<string, string> = {
   precio_alto: "Precio muy alto", otro: "Otro", no_visitado: "No visitado",
 }
 
-interface ClienteRuta { id: string; codigo: string; nombre: string; razon_social: string; municipio: string; direccion: string }
+interface ClienteRuta { id: string; codigo: string; nombre: string; razon_social: string; municipio: string; direccion: string; latitud: number | null; longitud: number | null }
 interface Visita { cliente_id: string; resultado: string; observacion: string | null }
 
 function hoyCol() { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" }) }
@@ -37,6 +37,7 @@ export default function MiRutaPage() {
   const [error, setError] = useState("")
   const [otroAbierto, setOtroAbierto] = useState<string | null>(null)
   const [otroTexto, setOtroTexto] = useState("")
+  const [guardandoUbic, setGuardandoUbic] = useState<string | null>(null)
 
   useEffect(() => { cargar() }, [])
 
@@ -75,7 +76,7 @@ export default function MiRutaPage() {
     let desde = 0; const TAM = 1000
     while (true) {
       const { data } = await supabase.from("clientes")
-        .select("id, codigo, nombre, razon_social, municipio, direccion")
+        .select("id, codigo, nombre, razon_social, municipio, direccion, latitud, longitud")
         .eq("ruta_id", asig.ruta_id).order("nombre").range(desde, desde + TAM - 1)
       if (!data || data.length === 0) break
       acumulado.push(...data)
@@ -187,6 +188,60 @@ export default function MiRutaPage() {
       await supabase.from("visitas").delete().eq("cliente_id", clienteId).eq("usuario_id", user.id).eq("fecha", hoyCol())
     }
     setVisitas(prev => { const n = { ...prev }; delete n[clienteId]; return n })
+  }
+
+  function capturarUbicacion(): Promise<{ lat: number; lng: number }> {
+    return new Promise((resolve, reject) => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        reject(new Error("Tu dispositivo no tiene GPS disponible"))
+        return
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        err => reject(err),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      )
+    })
+  }
+
+  async function guardarUbicacion(clienteId: string) {
+    setError(""); setMsg("")
+    setGuardandoUbic(clienteId)
+    let coords: { lat: number; lng: number }
+    try {
+      coords = await capturarUbicacion()
+    } catch {
+      setGuardandoUbic(null)
+      alert("No se pudo obtener tu ubicación. Activa el GPS y permite el acceso a la ubicación.")
+      return
+    }
+    const user = session!
+    const online = typeof navigator === "undefined" || navigator.onLine
+    const fechaIso = new Date().toISOString()
+
+    if (online) {
+      const { error: err } = await supabase.from("clientes")
+        .update({ latitud: coords.lat, longitud: coords.lng, ubicacion_fecha: fechaIso })
+        .eq("id", clienteId)
+      if (err) { setGuardandoUbic(null); alert("No se pudo guardar la ubicación: " + err.message); return }
+    } else {
+      await agregarPendiente({
+        id: `ubicacion-${clienteId}`,
+        tipo: "ubicacion",
+        creado: fechaIso,
+        payload: { id: clienteId, latitud: coords.lat, longitud: coords.lng, ubicacion_fecha: fechaIso },
+      })
+    }
+    setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, latitud: coords.lat, longitud: coords.lng } : c))
+    setGuardandoUbic(null)
+    setMsg("✓ Ubicación de la tienda guardada." + (online ? "" : " Se enviará al volver el internet."))
+    setTimeout(() => setMsg(""), 3000)
+  }
+
+  function comoLlegar(c: ClienteRuta) {
+    if (c.latitud == null || c.longitud == null) return
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${c.latitud},${c.longitud}`
+    window.open(url, "_blank")
   }
 
   async function cerrarRuta() {
@@ -310,6 +365,18 @@ export default function MiRutaPage() {
                       {ETIQUETA[estado] || "Sin marcar"}
                       {estado === "otro" && visitas[c.id]?.observacion ? `: ${visitas[c.id].observacion}` : ""}
                     </span>
+                  </div>
+
+                  {/* Ubicación de la tienda: cómo llegar y guardar/actualizar */}
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                    {c.latitud != null && c.longitud != null && (
+                      <button onClick={() => comoLlegar(c)} style={{ padding: "8px 14px", background: "#1d4ed8", color: "white", fontSize: "13px", fontWeight: 600, borderRadius: "8px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                        Cómo llegar
+                      </button>
+                    )}
+                    <button onClick={() => guardarUbicacion(c.id)} disabled={guardandoUbic === c.id} style={{ padding: "8px 14px", background: theme.cardAlt, color: theme.text, fontSize: "13px", fontWeight: 600, borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer", opacity: guardandoUbic === c.id ? 0.6 : 1 }}>
+                      {guardandoUbic === c.id ? "Obteniendo GPS..." : (c.latitud != null ? "Actualizar ubicación" : "Guardar ubicación")}
+                    </button>
                   </div>
 
                   {/* Botones para marcar (solo si no compró, no está cerrada) */}
