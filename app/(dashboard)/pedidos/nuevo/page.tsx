@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { Cliente, Producto, Ruta } from "@/lib/types"
 import { getSession } from "@/lib/auth"
 import { useTheme } from "@/lib/theme-context"
+import { leerDato, agregarPendiente } from "@/lib/offline-db"
 
 type ItemForm = { producto: Producto; cantidad: number; precio_unitario: number }
 
@@ -37,12 +38,52 @@ export default function NuevoPedidoPage() {
   const [rutaHoyId, setRutaHoyId] = useState<string>("")
 
   useEffect(() => {
-    cargarTodo("clientes").then(setClientes)
-    cargarTodo("productos").then(setProductos)
-    supabase.from("configuraciones").select("whatsapp_numero,nombre_empresa").limit(1).single().then(r => setConfig(r.data))
-    cargarRutaDelDia()
+    cargarInicial()
     if (pedidoId) cargarPedido(pedidoId)
   }, [])
+
+  async function cargarInicial() {
+    const online = typeof navigator === "undefined" || navigator.onLine
+    if (online) {
+      const [cli, prod] = await Promise.all([cargarTodo("clientes"), cargarTodo("productos")])
+      // Si la red falló y no trajo nada, intentamos los datos guardados
+      if (cli.length === 0 && prod.length === 0) { await cargarOffline(); return }
+      setClientes(cli); setProductos(prod)
+      const { data: cfg } = await supabase.from("configuraciones").select("whatsapp_numero,nombre_empresa").limit(1).single()
+      setConfig(cfg)
+      await cargarRutaDelDia()
+    } else {
+      await cargarOffline()
+    }
+  }
+
+  async function cargarOffline() {
+    const cli = await leerDato<Cliente[]>("clientes")
+    const prod = await leerDato<Producto[]>("productos")
+    const cfg = await leerDato<any>("config")
+    setClientes(cli || [])
+    setProductos(prod || [])
+    setConfig(cfg || null)
+    await cargarRutaOffline()
+  }
+
+  async function cargarRutaOffline() {
+    const user = getSession()
+    const esAdmin = (user?.perfil?.nombre || "").toLowerCase() === "administrador"
+    if (esAdmin) { setRutaFiltro("todas"); return }
+    const rd = await leerDato<{ ruta_id: string | null; descanso: boolean; nombre: string }>("ruta_dia")
+    if (!rd || (!rd.ruta_id && !rd.descanso)) {
+      setInfoRutaHoy("Sin conexión. Mostrando los clientes guardados de tu ruta.")
+      setRutaFiltro("todas")
+      return
+    }
+    if (rd.descanso) { setInfoRutaHoy("Hoy es tu día de descanso."); setRutaFiltro("todas"); return }
+    if (rd.ruta_id) {
+      setInfoRutaHoy(`Hoy te toca: ${rd.nombre} (sin conexión)`)
+      setRutaFiltro(rd.ruta_id)
+      setRutaHoyId(rd.ruta_id)
+    }
+  }
 
   async function cargarRutaDelDia() {
     // Cargar rutas activas (para el selector)
@@ -217,6 +258,32 @@ export default function NuevoPedidoPage() {
     setSaving(true); setError(""); setWarn("")
     const user = getSession()
 
+    const online = typeof navigator === "undefined" || navigator.onLine
+
+    // SIN SEÑAL: guardar el pedido en la cola del celular para enviarlo después
+    if (!online) {
+      if (modoEdicion) {
+        setSaving(false)
+        return setError("Sin conexión no se pueden editar pedidos. Solo crear nuevos.")
+      }
+      const nuevoId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const itemsPayload = items.map(i => ({ producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
+      const ok = await agregarPendiente({
+        id: nuevoId,
+        tipo: "pedido",
+        creado: new Date().toISOString(),
+        payload: {
+          pedido: { id: nuevoId, cliente_id: clienteId, usuario_id: user?.id, estado: "borrador", observaciones, total },
+          items: itemsPayload,
+        },
+      })
+      setSaving(false)
+      if (!ok) return setError("No se pudo guardar el pedido en este dispositivo.")
+      alert("Pedido guardado sin conexión. Se enviará automáticamente cuando vuelva el internet.")
+      setItems([]); setClienteId(""); setBuscarCliente(""); setObservaciones("")
+      return
+    }
+
     if (modoEdicion && pedidoId) {
       // Al editar NO se cambia el estado (se mantiene el que tenga el pedido)
       const { error: err } = await supabase.from("pedidos")
@@ -307,174 +374,4 @@ export default function NuevoPedidoPage() {
                 {clienteSeleccionado.municipio}{clienteSeleccionado.barrio ? ` · ${clienteSeleccionado.barrio}` : ""}{clienteSeleccionado.telefono ? ` · ${clienteSeleccionado.telefono}` : ""}
               </p>
             </div>
-            <button onClick={() => { setClienteId(""); setBuscarCliente("") }} style={{ padding: "6px 12px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid rgba(215,38,56,0.2)", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Cambiar</button>
-          </div>
-        ) : (
-          <div style={{ position: "relative" }}>
-            <input
-              value={buscarCliente}
-              onChange={e => { setBuscarCliente(e.target.value); setShowClientes(true) }}
-              onFocus={() => setShowClientes(true)}
-              placeholder="Buscar por nombre o código..."
-              style={inp}
-              autoComplete="off"
-            />
-            {showClientes && (buscarCliente || rutaFiltro !== "todas") && (
-              <div style={dropdownStyle}>
-                {clientesFiltrados.slice(0, 50).map(c => (
-                  <div
-                    key={c.id}
-                    onClick={() => { setClienteId(c.id); setBuscarCliente(""); setShowClientes(false) }}
-                    style={{ padding: "12px 16px", cursor: "pointer", borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: "14px" }}
-                  >
-                    {/* Código grande en el resultado */}
-                    <div style={{ background: "rgba(215,38,56,0.1)", borderRadius: "8px", padding: "6px 10px", minWidth: "70px", textAlign: "center", flexShrink: 0 }}>
-                      <p style={{ fontSize: "16px", fontWeight: "bold", color: "#D72638", margin: 0, letterSpacing: "0.5px" }}>{c.codigo}</p>
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
-                      {c.razon_social && <p style={{ color: theme.text, fontSize: "12px", margin: "0 0 2px", opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.razon_social}</p>}
-                      <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{c.municipio}{c.telefono ? ` · ${c.telefono}` : ""}</p>
-                    </div>
-                  </div>
-                ))}
-                {clientesFiltrados.length === 0 && <p style={{ padding: "14px 16px", color: theme.muted, fontSize: "13px", margin: 0 }}>Sin resultados</p>}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* PRODUCTOS */}
-      <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "14px" }}>
-        <p style={{ fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 10px" }}>Productos</p>
-
-        <div style={{ position: "relative", marginBottom: "14px" }}>
-          <input
-            value={buscarProducto}
-            onChange={e => { setBuscarProducto(e.target.value); setShowProductos(true) }}
-            onFocus={() => setShowProductos(true)}
-            placeholder="Buscar producto por nombre o código..."
-            style={inp}
-            autoComplete="off"
-          />
-          {showProductos && buscarProducto && (
-            <div style={dropdownStyle}>
-              {productosFiltrados.slice(0, 8).map(p => (
-                <div key={p.id} onClick={() => agregarProducto(p)} style={{ padding: "11px 16px", cursor: "pointer", borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text }}>{p.nombre}</p>
-                    <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{p.codigo} · Stock: {p.stock} {p.unidad}</p>
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: "15px", color: "#D72638", flexShrink: 0 }}>${p.precio.toLocaleString("es-CO")}</span>
-                </div>
-              ))}
-              {productosFiltrados.length === 0 && <p style={{ padding: "14px 16px", color: theme.muted, fontSize: "13px", margin: 0 }}>Sin resultados</p>}
-            </div>
-          )}
-        </div>
-
-        {items.length === 0 ? (
-          <p style={{ color: theme.muted, fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Busca y agrega productos al pedido</p>
-        ) : (
-          <div style={{ display: "grid", gap: "10px" }}>
-            {items.map(item => (
-              <div key={item.producto.id} style={{ background: theme.cardAlt, borderRadius: "10px", border: `1px solid ${theme.border}`, padding: "12px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.producto.nombre}</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{item.producto.codigo} · {item.producto.unidad}</p>
-                      {/* Stock disponible siempre visible */}
-                      <span style={{
-                        padding: "2px 8px", borderRadius: "99px", fontSize: "11px", fontWeight: 700,
-                        background: item.producto.stock <= 0 ? "rgba(215,38,56,0.12)" : item.cantidad > item.producto.stock ? "rgba(245,158,11,0.15)" : "rgba(34,197,94,0.12)",
-                        color: item.producto.stock <= 0 ? "#D72638" : item.cantidad > item.producto.stock ? "#d97706" : "#16a34a",
-                      }}>
-                        {item.producto.stock <= 0 ? "Agotado" : `Stock: ${item.producto.stock}`}
-                      </span>
-                    </div>
-                  </div>
-                  <button onClick={() => quitarItem(item.producto.id)} style={{ background: "rgba(215,38,56,0.1)", border: "none", color: "#D72638", cursor: "pointer", fontSize: "13px", fontWeight: 600, borderRadius: "6px", padding: "4px 8px", flexShrink: 0 }}>Quitar</button>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                  {/* Cantidad con +/- */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <p style={{ fontSize: "11px", color: theme.muted, margin: 0, fontWeight: 600, textTransform: "uppercase" }}>Cant.</p>
-                      <button style={btnQty} onClick={() => restar(item.producto.id)}>−</button>
-                      <input
-                        type="number"
-                        value={item.cantidad}
-                        min={1}
-                        onChange={e => setCantidad(item.producto.id, e.target.value)}
-                        style={{ width: "52px", textAlign: "center", background: item.cantidad > item.producto.stock ? "rgba(245,158,11,0.1)" : theme.card, border: `1.5px solid ${item.cantidad > item.producto.stock ? "#f59e0b" : theme.border}`, borderRadius: "6px", color: theme.text, padding: "5px 4px", fontSize: "15px", fontWeight: 600, outline: "none" }}
-                      />
-                      <button style={btnQty} onClick={() => sumar(item.producto.id)}>+</button>
-                    </div>
-                    {/* Advertencia inline justo debajo de la cantidad */}
-                    {item.cantidad > item.producto.stock && item.producto.stock > 0 && (
-                      <p style={{ fontSize: "11px", color: "#d97706", margin: 0, fontWeight: 600 }}>
-                        ⚠️ Ojo: solo hay {item.producto.stock} en stock
-                      </p>
-                    )}
-                    {item.producto.stock <= 0 && (
-                      <p style={{ fontSize: "11px", color: "#D72638", margin: 0, fontWeight: 600 }}>
-                        🚨 Este producto está agotado
-                      </p>
-                    )}
-                  </div>
-                  {/* Precio */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <p style={{ fontSize: "11px", color: theme.muted, margin: 0, fontWeight: 600, textTransform: "uppercase" }}>Precio</p>
-                    <div style={{ position: "relative" }}>
-                      <span style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", fontSize: "13px", color: theme.muted }}>$</span>
-                      <input
-                        type="number"
-                        value={item.precio_unitario}
-                        min={0}
-                        onChange={e => cambiarPrecio(item.producto.id, e.target.value)}
-                        style={{ width: "110px", background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "6px", color: theme.text, padding: "5px 8px 5px 18px", fontSize: "14px", outline: "none" }}
-                      />
-                    </div>
-                  </div>
-                  {/* Subtotal */}
-                  <div style={{ marginLeft: "auto" }}>
-                    <p style={{ fontSize: "11px", color: theme.muted, margin: "0 0 1px", textTransform: "uppercase" }}>Subtotal</p>
-                    <p style={{ fontWeight: 700, fontSize: "16px", color: theme.text, margin: 0 }}>${(item.cantidad * item.precio_unitario).toLocaleString("es-CO")}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* OBSERVACIONES */}
-      <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "14px" }}>
-        <p style={{ fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.8px", margin: "0 0 10px" }}>Observaciones</p>
-        <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Indicaciones especiales, horario de entrega, etc." rows={3}
-          style={{ background: theme.cardAlt, border: `1.5px solid ${theme.border}`, borderRadius: "8px", color: theme.text, fontSize: "14px", padding: "10px 12px", outline: "none", width: "100%", boxSizing: "border-box", resize: "vertical" }} />
-      </div>
-
-      {/* TOTAL Y BOTONES */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px 20px", flexWrap: "wrap", gap: "16px" }}>
-        <div>
-          {totalIva > 0 && (
-            <div style={{ marginBottom: "8px" }}>
-              <p style={{ color: theme.muted, fontSize: "13px", margin: "0 0 2px" }}>Subtotal sin IVA: <span style={{ fontWeight: 600, color: theme.text }}>${Math.round(totalSinIva).toLocaleString("es-CO")}</span></p>
-              <p style={{ color: theme.muted, fontSize: "13px", margin: 0 }}>IVA: <span style={{ fontWeight: 600, color: theme.text }}>${Math.round(totalIva).toLocaleString("es-CO")}</span></p>
-            </div>
-          )}
-          <p style={{ color: theme.muted, fontSize: "12px", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Total del pedido (con IVA)</p>
-          <p style={{ fontSize: "26px", fontWeight: "bold", margin: 0, color: theme.text }}>${total.toLocaleString("es-CO")}</p>
-        </div>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button onClick={() => guardar()} disabled={saving} style={{ padding: "11px 24px", background: "#D72638", color: "white", fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
-            {saving ? "Guardando..." : (modoEdicion ? "Guardar cambios" : "Guardar pedido")}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+            <button onClick={() => { setClienteId(""); setBuscarCliente("") }} style={{ padding: "6px 12px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", fontWeight: 600, borderRadius: "6px", 
