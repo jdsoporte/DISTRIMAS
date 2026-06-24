@@ -51,7 +51,7 @@ export async function leerDato<T>(clave: string): Promise<T | null> {
 // ----- Cola de pendientes (outbox) -----
 export interface Pendiente {
   id: string          // uuid generado en el celular (para no duplicar al enviar)
-  tipo: "pedido" | "visita"
+  tipo: "pedido" | "visita" | "cierre"
   payload: unknown    // datos a enviar
   creado: string      // fecha ISO
 }
@@ -95,5 +95,4 @@ export async function quitarPendiente(id: string): Promise<boolean> {
 export async function contarPendientes(): Promise<number> {
   const p = await leerPendientes()
   return p.length
-                                    }
-
+}
