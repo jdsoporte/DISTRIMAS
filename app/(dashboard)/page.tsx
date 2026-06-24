@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { Usuario } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
 import MapaVendedores from "@/components/MapaVendedores"
+import ReporteVisitas from "@/components/ReporteVisitas"
 import HistorialDia from "@/components/HistorialDia"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -264,6 +265,9 @@ export default function DashboardPage() {
 
       {/* Mapa de ubicación de vendedores (solo admin) */}
       {isAdmin && <MapaVendedores />}
+
+      {/* Control de visitas por vendedor (solo admin) */}
+      {isAdmin && <ReporteVisitas />}
 
       {/* Historial de ventas por día (admin y vendedor) */}
       <HistorialDia />
