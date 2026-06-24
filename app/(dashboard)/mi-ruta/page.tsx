@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getSession } from "@/lib/auth"
 import { useTheme } from "@/lib/theme-context"
-import { leerDato } from "@/lib/offline-db"
+import { leerDato, agregarPendiente, leerPendientes } from "@/lib/offline-db"
 
 const MOTIVOS = [
   { val: "tienda_cerrada", label: "Tienda cerrada" },
@@ -119,7 +119,18 @@ export default function MiRutaPage() {
     const deRuta = (todos || []).filter(c => !rd.ruta_id || (c as any).ruta_id === rd.ruta_id)
     setClientes(deRuta)
     setCompraron(new Set())
-    setVisitas({})
+
+    // Visitas que se marcaron sin señal (siguen en la cola del celular)
+    const fecha = hoyCol()
+    const pend = await leerPendientes()
+    const mapaVis: Record<string, Visita> = {}
+    pend.filter(p => p.tipo === "visita").forEach(p => {
+      const v = p.payload as any
+      if (v.fecha === fecha && v.resultado !== "no_visitado") {
+        mapaVis[v.cliente_id] = { cliente_id: v.cliente_id, resultado: v.resultado, observacion: v.observacion }
+      }
+    })
+    setVisitas(mapaVis)
     setCerrada(false)
     setLoading(false)
   }
@@ -136,6 +147,21 @@ export default function MiRutaPage() {
     const user = session
     if (!user?.id) { alert("No se pudo identificar tu sesión. Vuelve a iniciar sesión."); return }
     const fecha = hoyCol()
+    const online = typeof navigator === "undefined" || navigator.onLine
+
+    // SIN SEÑAL: guardar la visita en la cola del celular
+    if (!online) {
+      await agregarPendiente({
+        id: `visita-${clienteId}-${fecha}`,
+        tipo: "visita",
+        creado: new Date().toISOString(),
+        payload: { cliente_id: clienteId, usuario_id: user.id, ruta_id: rutaId, fecha, resultado, observacion: observacion || null },
+      })
+      setVisitas(prev => ({ ...prev, [clienteId]: { cliente_id: clienteId, resultado, observacion } }))
+      setOtroAbierto(null); setOtroTexto("")
+      return
+    }
+
     const yaExiste = !!visitas[clienteId]
     let err
     if (yaExiste) {
@@ -156,7 +182,10 @@ export default function MiRutaPage() {
   async function quitarMarca(clienteId: string) {
     if (cerrada) return
     const user = session!
-    await supabase.from("visitas").delete().eq("cliente_id", clienteId).eq("usuario_id", user.id).eq("fecha", hoyCol())
+    const online = typeof navigator === "undefined" || navigator.onLine
+    if (online) {
+      await supabase.from("visitas").delete().eq("cliente_id", clienteId).eq("usuario_id", user.id).eq("fecha", hoyCol())
+    }
     setVisitas(prev => { const n = { ...prev }; delete n[clienteId]; return n })
   }
 
@@ -169,6 +198,33 @@ export default function MiRutaPage() {
     setError(""); setMsg("")
     const user = session!
     const fecha = hoyCol()
+    const online = typeof navigator === "undefined" || navigator.onLine
+
+    // SIN SEÑAL: guardar el cierre y los no visitados en la cola del celular
+    if (!online) {
+      for (const c of sinMarcar) {
+        await agregarPendiente({
+          id: `visita-${c.id}-${fecha}`,
+          tipo: "visita",
+          creado: new Date().toISOString(),
+          payload: { cliente_id: c.id, usuario_id: user.id, ruta_id: rutaId, fecha, resultado: "no_visitado", observacion: null },
+        })
+      }
+      await agregarPendiente({
+        id: `cierre-${user.id}-${fecha}`,
+        tipo: "cierre",
+        creado: new Date().toISOString(),
+        payload: { usuario_id: user.id, fecha },
+      })
+      setVisitas(prev => {
+        const n = { ...prev }
+        sinMarcar.forEach(c => { n[c.id] = { cliente_id: c.id, resultado: "no_visitado", observacion: null } })
+        return n
+      })
+      setCerrada(true)
+      setMsg("✓ Ruta cerrada sin conexión. Se enviará cuando vuelva el internet.")
+      return
+    }
 
     // Marcar como no_visitado los que quedaron sin marcar
     if (sinMarcar.length > 0) {
@@ -296,5 +352,4 @@ export default function MiRutaPage() {
       )}
     </div>
   )
-                        }
-    
+}
