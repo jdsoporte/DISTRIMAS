@@ -5,6 +5,7 @@ import { getSession, logout } from "@/lib/auth"
 import { Usuario } from "@/lib/types"
 import { ThemeContext, DARK, LIGHT } from "@/lib/theme-context"
 import TourGuia from "@/components/TourGuia"
+import OfflineSync from "@/components/OfflineSync"
 
 const MENUS_ADMIN = [
   { section: "Principal" },
@@ -166,6 +167,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="page-padding" style={{ padding: "24px", flex: 1, minWidth: 0 }}>{children}</div>
         </main>
       </div>
+      <OfflineSync />
     </ThemeContext.Provider>
   )
-}
+                         }
+      
