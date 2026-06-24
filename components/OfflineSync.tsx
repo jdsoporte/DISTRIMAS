@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { getSession } from "@/lib/auth"
-import { descargarParaOffline } from "@/lib/offline-sync"
+import { descargarParaOffline, enviarPendientes } from "@/lib/offline-sync"
 import { contarPendientes } from "@/lib/offline-db"
 
 type Estado = "ok" | "offline" | "sync" | "listo"
@@ -23,10 +23,16 @@ export default function OfflineSync() {
         return
       }
       if (activo) { setEstado("sync"); setVisible(true) }
+      // 1) Enviar lo que quedó pendiente sin señal
+      const enviados = await enviarPendientes()
+      // 2) Refrescar los datos guardados
       const ok = await descargarParaOffline(user.id)
       if (!activo) return
       setEstado(ok ? "listo" : "ok")
       actualizarPendientes()
+      if (enviados > 0) {
+        setEstado("listo")
+      }
       // El aviso "listo" desaparece solo a los 4 segundos
       setTimeout(() => { if (activo) setVisible(false) }, 4000)
     }
@@ -67,4 +73,3 @@ export default function OfflineSync() {
     </div>
   )
 }
-
