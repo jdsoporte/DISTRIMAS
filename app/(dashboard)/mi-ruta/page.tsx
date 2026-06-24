@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getSession } from "@/lib/auth"
 import { useTheme } from "@/lib/theme-context"
+import { leerDato } from "@/lib/offline-db"
 
 const MOTIVOS = [
   { val: "tienda_cerrada", label: "Tienda cerrada" },
@@ -43,6 +44,12 @@ export default function MiRutaPage() {
     setLoading(true); setError("")
     const user = session
     if (!user?.id) { setLoading(false); return }
+
+    // Sin señal: usar los datos guardados en el celular
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      await cargarOffline()
+      return
+    }
 
     const ahora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
     const diaCol = ahora.getDay()
@@ -96,6 +103,24 @@ export default function MiRutaPage() {
       .select("id").eq("usuario_id", user.id).eq("fecha", fecha).maybeSingle()
     setCerrada(!!cierre)
 
+    setLoading(false)
+  }
+
+  // Carga sin señal: usa los clientes y la ruta guardados en el celular
+  async function cargarOffline() {
+    const rd = await leerDato<{ ruta_id: string | null; descanso: boolean; nombre: string }>("ruta_dia")
+    if (!rd || (!rd.ruta_id && !rd.descanso)) { setSinRuta("Sin conexión y no hay ruta guardada. Abre la app con señal al menos una vez."); setLoading(false); return }
+    if (rd.descanso) { setSinRuta("Hoy es tu día de descanso."); setLoading(false); return }
+
+    setRutaNombre((rd.nombre || "") + " (sin conexión)")
+    setRutaId(rd.ruta_id)
+
+    const todos = await leerDato<ClienteRuta[]>("clientes")
+    const deRuta = (todos || []).filter(c => !rd.ruta_id || (c as any).ruta_id === rd.ruta_id)
+    setClientes(deRuta)
+    setCompraron(new Set())
+    setVisitas({})
+    setCerrada(false)
     setLoading(false)
   }
 
@@ -271,4 +296,5 @@ export default function MiRutaPage() {
       )}
     </div>
   )
-}
+                        }
+    
