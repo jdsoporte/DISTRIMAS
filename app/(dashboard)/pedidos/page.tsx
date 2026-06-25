@@ -84,19 +84,39 @@ export default function PedidosPage() {
       `💰 *TOTAL: $${(pedido.total || 0).toLocaleString("es-CO")}*`,
       pedido.observaciones ? `\n📝 ${pedido.observaciones}` : "",
     ].join("\n").trim()
-    window.open(`https://wa.me/${config.whatsapp_numero}?text=${encodeURIComponent(msg)}`, "_blank")
+    const numero = config.whatsapp_numero
+    const texto = encodeURIComponent(msg)
+    const esMovil = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    if (esMovil) {
+      // En celular: abrir la app de WhatsApp directo, sin la página web intermedia (mucho más rápido)
+      window.location.href = `whatsapp://send?phone=${numero}&text=${texto}`
+    } else {
+      window.open(`https://wa.me/${numero}?text=${texto}`, "_blank")
+    }
   }
 
   async function cambiarEstado(id: string, estado: string) {
     setMsgEstado(""); setErrorEstado("")
     const pedido = pedidos.find(p => p.id === id)
+
+    // Al confirmar: abrir WhatsApp de inmediato (sin esperar a la base de datos) y guardar el estado en segundo plano
+    if (estado === "confirmado" && pedido) {
+      supabase.from("pedidos").update({ estado }).eq("id", id).then(({ error }) => {
+        if (error) { setErrorEstado("No se pudo cambiar el estado: " + error.message); return }
+        load()
+        if (detalle?.id === id) setDetalle(d => d ? { ...d, estado: estado as Pedido["estado"] } : d)
+        setMsgEstado("✓ Pedido confirmado.")
+        setTimeout(() => setMsgEstado(""), 2500)
+      })
+      abrirWhatsApp(pedido)
+      return
+    }
+
     const { error } = await supabase.from("pedidos").update({ estado }).eq("id", id)
     if (error) {
       setErrorEstado("No se pudo cambiar el estado: " + error.message)
       return
     }
-    // Al confirmar, abrir WhatsApp automáticamente
-    if (estado === "confirmado" && pedido) abrirWhatsApp(pedido)
     await load()
     if (detalle?.id === id) setDetalle(d => d ? { ...d, estado: estado as Pedido["estado"] } : d)
     setMsgEstado(`✓ Pedido marcado como ${estado}.`)
