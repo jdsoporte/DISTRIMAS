@@ -47,6 +47,9 @@ export interface Cliente {
   ruta_id: string | null
   activo: boolean
   created_at: string
+  latitud?: number | null
+  longitud?: number | null
+  ubicacion_fecha?: string | null
 }
 export interface Ruta {
   id: string
