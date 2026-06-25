@@ -28,7 +28,6 @@ export default function NuevoPedidoPage() {
   const [observaciones, setObservaciones] = useState("")
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState("")
-  const [warn, setWarn]           = useState("")
   const [itemsExceso, setItemsExceso] = useState<ItemForm[]>([])
   const [showClientes, setShowClientes]   = useState(false)
   const [showProductos, setShowProductos] = useState(false)
@@ -218,11 +217,6 @@ export default function NuevoPedidoPage() {
 
   function quitarItem(id: string) { setItems(items.filter(i => i.producto.id !== id)) }
 
-  function alertaStock(item: ItemForm, nuevaCant: number) {
-    if (nuevaCant > item.producto.stock)
-      setWarn(`⚠️ Ojo: "${item.producto.nombre}" solo tiene ${item.producto.stock} uds. en stock. El vendedor es responsable de este pedido.`)
-    else setWarn("")
-  }
   function setCantidad(id: string, val: string) {
     if (val === "") {
       setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: 0 } : i))
@@ -230,8 +224,6 @@ export default function NuevoPedidoPage() {
     }
     const n = parseInt(val)
     if (isNaN(n) || n < 0) return
-    const item = items.find(i => i.producto.id === id)
-    if (item) alertaStock(item, n)
     setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: n } : i))
   }
   function cambiarPrecio(id: string, val: string) {
@@ -256,7 +248,7 @@ export default function NuevoPedidoPage() {
     }
     setItemsExceso([])
 
-    setSaving(true); setError(""); setWarn("")
+    setSaving(true); setError("")
     const user = getSession()
 
     const online = typeof navigator === "undefined" || navigator.onLine
@@ -321,7 +313,6 @@ export default function NuevoPedidoPage() {
       </div>
 
       {error && <div style={{ background: "rgba(215,38,56,0.1)", border: "1px solid rgba(215,38,56,0.25)", color: "#D72638", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
-      {warn  && <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)", color: "#d97706", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "16px", fontWeight: 500 }}>{warn}</div>}
 
       {/* CLIENTE */}
       <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "14px" }}>
@@ -486,17 +477,6 @@ export default function NuevoPedidoPage() {
                         style={{ width: "70px", textAlign: "center", background: item.cantidad > item.producto.stock ? "rgba(245,158,11,0.1)" : theme.card, border: `1.5px solid ${item.cantidad > item.producto.stock ? "#f59e0b" : theme.border}`, borderRadius: "6px", color: theme.text, padding: "7px 6px", fontSize: "16px", fontWeight: 700, outline: "none" }}
                       />
                     </div>
-                    {/* Advertencia inline justo debajo de la cantidad */}
-                    {item.cantidad > item.producto.stock && item.producto.stock > 0 && (
-                      <p style={{ fontSize: "11px", color: "#d97706", margin: 0, fontWeight: 600 }}>
-                        Ojo: solo hay {item.producto.stock} en stock
-                      </p>
-                    )}
-                    {item.producto.stock <= 0 && (
-                      <p style={{ fontSize: "11px", color: "#D72638", margin: 0, fontWeight: 600 }}>
-                        Este producto está agotado
-                      </p>
-                    )}
                   </div>
                   {/* Precio */}
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
