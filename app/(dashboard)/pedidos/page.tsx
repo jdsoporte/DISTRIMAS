@@ -58,7 +58,10 @@ export default function PedidosPage() {
   }
 
   function abrirWhatsApp(pedido: Pedido) {
-    if (!config?.whatsapp_numero) return
+    if (!config?.whatsapp_numero) {
+      setErrorEstado("No hay un número de WhatsApp configurado. Ve a Configuraciones para agregarlo.")
+      return
+    }
     const cliente: any = Array.isArray(pedido.cliente) ? pedido.cliente[0] : pedido.cliente
     const vendedor: any = Array.isArray(pedido.usuario) ? pedido.usuario[0] : pedido.usuario
     const items: any[] = pedido.items || []
@@ -178,6 +181,8 @@ export default function PedidosPage() {
   function acciones(p: Pedido) {
     return (
       <div className="acciones-wrap">
+        {(p.estado === "confirmado" || p.estado === "entregado") &&
+          <button onClick={() => abrirWhatsApp(p)} style={{ padding: "5px 10px", background: "rgba(37,211,102,0.15)", color: "#1da851", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Enviar WhatsApp</button>}
         {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) &&
           <button onClick={() => router.push(`/pedidos/nuevo?id=${p.id}`)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Editar</button>}
         {p.estado === "borrador" && <button onClick={() => cambiarEstado(p.id, "confirmado")} style={{ padding: "5px 10px", background: "rgba(59,130,246,0.15)", color: "#3b82f6", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Confirmar</button>}
