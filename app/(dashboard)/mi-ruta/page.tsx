@@ -38,6 +38,7 @@ export default function MiRutaPage() {
   const [otroAbierto, setOtroAbierto] = useState<string | null>(null)
   const [otroTexto, setOtroTexto] = useState("")
   const [guardandoUbic, setGuardandoUbic] = useState<string | null>(null)
+  const [buscar, setBuscar] = useState("")
 
   useEffect(() => { cargar() }, [])
 
@@ -347,9 +348,23 @@ export default function MiRutaPage() {
             </div>
           )}
 
+          {/* Buscador */}
+          <input
+            value={buscar}
+            onChange={e => setBuscar(e.target.value)}
+            placeholder="Buscar por nombre, razón social o código..."
+            style={{ width: "100%", boxSizing: "border-box", background: theme.card, border: `1.5px solid ${theme.border}`, borderRadius: "10px", color: theme.text, fontSize: "14px", padding: "11px 14px", outline: "none", marginBottom: "12px" }}
+          />
+
           {/* Lista de clientes */}
           <div style={{ display: "grid", gap: "10px" }}>
-            {clientes.map(c => {
+            {clientes.filter(c => {
+              const q = buscar.trim().toLowerCase()
+              if (!q) return true
+              return (c.nombre || "").toLowerCase().includes(q)
+                || (c.razon_social || "").toLowerCase().includes(q)
+                || (c.codigo || "").toLowerCase().includes(q)
+            }).map(c => {
               const estado = estadoDe(c.id)
               const col = colorEstado(estado)
               return (
