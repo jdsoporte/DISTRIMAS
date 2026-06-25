@@ -34,6 +34,8 @@ export default function NuevoPedidoPage() {
   const [rutas, setRutas]         = useState<Ruta[]>([])
   const [rutaFiltro, setRutaFiltro] = useState<string>("todas")
   const [infoRutaHoy, setInfoRutaHoy] = useState("")
+  const [guardandoUbic, setGuardandoUbic] = useState(false)
+  const [msgUbic, setMsgUbic] = useState("")
   const [rutaFestivo, setRutaFestivo] = useState<{ id: string; nombre: string } | null>(null)
   const [festivoHoy, setFestivoHoy] = useState(false)
   const [rutaHoyId, setRutaHoyId] = useState<string>("")
@@ -207,6 +209,54 @@ export default function NuevoPedidoPage() {
     p.codigo.toLowerCase().includes(buscarProducto.toLowerCase())
   )
 
+  function capturarUbicacion(): Promise<{ lat: number; lng: number }> {
+    return new Promise((resolve, reject) => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        reject(new Error("Tu dispositivo no tiene GPS disponible"))
+        return
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        err => reject(err),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      )
+    })
+  }
+
+  async function guardarUbicacionCliente() {
+    if (!clienteId) return
+    setError(""); setMsgUbic("")
+    setGuardandoUbic(true)
+    let coords: { lat: number; lng: number }
+    try {
+      coords = await capturarUbicacion()
+    } catch {
+      setGuardandoUbic(false)
+      alert("No se pudo obtener tu ubicación. Activa el GPS y permite el acceso a la ubicación.")
+      return
+    }
+    const online = typeof navigator === "undefined" || navigator.onLine
+    const fechaIso = new Date().toISOString()
+
+    if (online) {
+      const { error: err } = await supabase.from("clientes")
+        .update({ latitud: coords.lat, longitud: coords.lng, ubicacion_fecha: fechaIso })
+        .eq("id", clienteId)
+      if (err) { setGuardandoUbic(false); alert("No se pudo guardar la ubicación: " + err.message); return }
+    } else {
+      await agregarPendiente({
+        id: `ubicacion-${clienteId}`,
+        tipo: "ubicacion",
+        creado: fechaIso,
+        payload: { id: clienteId, latitud: coords.lat, longitud: coords.lng, ubicacion_fecha: fechaIso },
+      })
+    }
+    setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, latitud: coords.lat, longitud: coords.lng } : c))
+    setGuardandoUbic(false)
+    setMsgUbic("✓ Ubicación de la tienda guardada." + (online ? "" : " Se enviará al volver el internet."))
+    setTimeout(() => setMsgUbic(""), 3000)
+  }
+
   function agregarProducto(p: Producto) {
     const existe = items.find(i => i.producto.id === p.id)
     if (!existe) {
@@ -237,6 +287,11 @@ export default function NuevoPedidoPage() {
 
   async function guardar(confirmadoStock = false) {
     if (!clienteId) return setError("Selecciona un cliente")
+    // Ubicación obligatoria solo si el cliente aún no la tiene cargada
+    const cli = clientes.find(c => c.id === clienteId)
+    if (cli && (cli.latitud == null || cli.longitud == null)) {
+      return setError("Este cliente no tiene ubicación guardada. Pulsa \"Guardar ubicación de la tienda\" antes de continuar.")
+    }
     const itemsGuardar = items.filter(i => i.cantidad > 0)
     if (itemsGuardar.length === 0) return setError("Escribe la cantidad de al menos un producto")
 
@@ -362,6 +417,7 @@ export default function NuevoPedidoPage() {
         )}
 
         {clienteSeleccionado ? (
+          <>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "14px 16px", background: theme.cardAlt, borderRadius: "10px", border: `1px solid ${theme.border}` }}>
             <div style={{ minWidth: 0 }}>
               {/* Código grande y visible */}
@@ -374,6 +430,29 @@ export default function NuevoPedidoPage() {
             </div>
             <button onClick={() => { setClienteId(""); setBuscarCliente("") }} style={{ padding: "6px 12px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "1px solid rgba(215,38,56,0.2)", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Cambiar</button>
           </div>
+
+          {/* Ubicación: obligatoria solo si el cliente no la tiene cargada */}
+          {(clienteSeleccionado.latitud == null || clienteSeleccionado.longitud == null) ? (
+            <div style={{ marginTop: "10px", padding: "12px 14px", background: "rgba(215,38,56,0.06)", border: "1px solid rgba(215,38,56,0.3)", borderRadius: "10px" }}>
+              <p style={{ fontSize: "13px", color: "#D72638", fontWeight: 600, margin: "0 0 8px" }}>
+                Este cliente no tiene ubicación guardada. Es obligatorio capturarla para hacer el pedido.
+              </p>
+              <button
+                onClick={guardarUbicacionCliente}
+                disabled={guardandoUbic}
+                style={{ width: "100%", padding: "11px", background: "#D72638", color: "white", fontWeight: 700, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: guardandoUbic ? 0.6 : 1 }}
+              >
+                {guardandoUbic ? "Obteniendo ubicación..." : "Guardar ubicación de la tienda"}
+              </button>
+              <p style={{ fontSize: "11px", color: theme.muted, margin: "8px 0 0", textAlign: "center" }}>
+                Pulsa el botón estando dentro o frente a la tienda.
+              </p>
+            </div>
+          ) : (
+            <p style={{ marginTop: "8px", fontSize: "12px", color: "#16a34a", fontWeight: 600 }}>Ubicación de la tienda cargada.</p>
+          )}
+          {msgUbic && <p style={{ marginTop: "6px", fontSize: "12px", color: "#16a34a", fontWeight: 600 }}>{msgUbic}</p>}
+          </>
         ) : (
           <div style={{ position: "relative" }}>
             <input
