@@ -45,6 +45,13 @@ body {
 /* Acciones en tablas */
 .acciones-wrap { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* Lista de pedidos: tabla en escritorio, tarjetas en celular */
+.pedidos-cards { display: none; }
+@media (max-width: 640px) {
+  .pedidos-tabla { display: none; }
+  .pedidos-cards { display: grid; gap: 10px; }
+}
+
 /* Filtros responsivos */
 .filtros-wrap {
   display: flex;
