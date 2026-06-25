@@ -29,6 +29,7 @@ export default function NuevoPedidoPage() {
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState("")
   const [warn, setWarn]           = useState("")
+  const [itemsExceso, setItemsExceso] = useState<ItemForm[]>([])
   const [showClientes, setShowClientes]   = useState(false)
   const [showProductos, setShowProductos] = useState(false)
   const [rutas, setRutas]         = useState<Ruta[]>([])
@@ -209,10 +210,8 @@ export default function NuevoPedidoPage() {
 
   function agregarProducto(p: Producto) {
     const existe = items.find(i => i.producto.id === p.id)
-    if (existe) {
-      setItems(items.map(i => i.producto.id === p.id ? { ...i, cantidad: i.cantidad + 1 } : i))
-    } else {
-      setItems([...items, { producto: p, cantidad: 1, precio_unitario: p.precio }])
+    if (!existe) {
+      setItems([...items, { producto: p, cantidad: 0, precio_unitario: p.precio }])
     }
     setBuscarProducto(""); setShowProductos(false)
   }
@@ -224,27 +223,13 @@ export default function NuevoPedidoPage() {
       setWarn(`⚠️ Ojo: "${item.producto.nombre}" solo tiene ${item.producto.stock} uds. en stock. El vendedor es responsable de este pedido.`)
     else setWarn("")
   }
-  function sumar(id: string) {
-    const item = items.find(i => i.producto.id === id)
-    if (!item) return
-    const nuevaCant = item.cantidad + 1
-    alertaStock(item, nuevaCant)
-    setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: nuevaCant } : i))
-  }
-  function restar(id: string) {
-    const item = items.find(i => i.producto.id === id)
-    if (!item || item.cantidad <= 1) return
-    const nuevaCant = item.cantidad - 1
-    alertaStock(item, nuevaCant)
-    setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: nuevaCant } : i))
-  }
   function setCantidad(id: string, val: string) {
-    const n = parseInt(val)
-    if (isNaN(n) || val === "") {
-      setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: 1 } : i))
+    if (val === "") {
+      setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: 0 } : i))
       return
     }
-    if (n < 1) return
+    const n = parseInt(val)
+    if (isNaN(n) || n < 0) return
     const item = items.find(i => i.producto.id === id)
     if (item) alertaStock(item, n)
     setItems(items.map(i => i.producto.id === id ? { ...i, cantidad: n } : i))
@@ -258,9 +243,19 @@ export default function NuevoPedidoPage() {
   const totalSinIva = items.reduce((acc, i) => acc + i.cantidad * (i.precio_unitario / (1 + (i.producto.iva || 0) / 100)), 0)
   const totalIva = total - totalSinIva
 
-  async function guardar() {
+  async function guardar(confirmadoStock = false) {
     if (!clienteId) return setError("Selecciona un cliente")
-    if (items.length === 0) return setError("Agrega al menos un producto")
+    const itemsGuardar = items.filter(i => i.cantidad > 0)
+    if (itemsGuardar.length === 0) return setError("Escribe la cantidad de al menos un producto")
+
+    // Aviso grande: hay productos pedidos por encima del stock disponible
+    const exceso = itemsGuardar.filter(i => i.cantidad > i.producto.stock)
+    if (exceso.length > 0 && !confirmadoStock) {
+      setItemsExceso(exceso)
+      return
+    }
+    setItemsExceso([])
+
     setSaving(true); setError(""); setWarn("")
     const user = getSession()
 
@@ -273,7 +268,7 @@ export default function NuevoPedidoPage() {
         return setError("Sin conexión no se pueden editar pedidos. Solo crear nuevos.")
       }
       const nuevoId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      const itemsPayload = items.map(i => ({ producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
+      const itemsPayload = itemsGuardar.map(i => ({ producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
       const ok = await agregarPendiente({
         id: nuevoId,
         tipo: "pedido",
@@ -297,7 +292,7 @@ export default function NuevoPedidoPage() {
         .eq("id", pedidoId)
       if (err) { setSaving(false); return setError(err.message) }
       await supabase.from("pedido_items").delete().eq("pedido_id", pedidoId)
-      const itemsInsert = items.map(i => ({ pedido_id: pedidoId, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
+      const itemsInsert = itemsGuardar.map(i => ({ pedido_id: pedidoId, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
       const { error: errItems } = await supabase.from("pedido_items").insert(itemsInsert)
       if (errItems) { setSaving(false); return setError("No se pudieron guardar los productos: " + errItems.message) }
     } else {
@@ -306,7 +301,7 @@ export default function NuevoPedidoPage() {
         .insert({ cliente_id: clienteId, usuario_id: user?.id, estado: "borrador", observaciones, total })
         .select().single()
       if (err || !pedido) { setSaving(false); return setError(err?.message || "Error al crear pedido") }
-      const itemsInsert = items.map(i => ({ pedido_id: pedido.id, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
+      const itemsInsert = itemsGuardar.map(i => ({ pedido_id: pedido.id, producto_id: i.producto.id, cantidad: i.cantidad, precio_unitario: i.precio_unitario }))
       const { error: errItems } = await supabase.from("pedido_items").insert(itemsInsert)
       if (errItems) { setSaving(false); return setError("No se pudieron guardar los productos: " + errItems.message) }
     }
@@ -317,7 +312,6 @@ export default function NuevoPedidoPage() {
 
   const inp = { background: theme.cardAlt, border: `1.5px solid ${theme.border}`, borderRadius: "8px", color: theme.text, fontSize: "14px", padding: "10px 12px", outline: "none", width: "100%", boxSizing: "border-box" as const }
   const dropdownStyle = { position: "absolute" as const, top: "100%", left: 0, right: 0, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "10px", zIndex: 50, maxHeight: "260px", overflowY: "auto" as const, marginTop: "6px", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }
-  const btnQty = { width: "30px", height: "30px", borderRadius: "6px", border: `1px solid ${theme.border}`, background: theme.cardAlt, color: theme.text, fontSize: "18px", lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 as const }
 
   return (
     <div style={{ maxWidth: "720px" }}>
@@ -478,29 +472,29 @@ export default function NuevoPedidoPage() {
                   <button onClick={() => quitarItem(item.producto.id)} style={{ background: "rgba(215,38,56,0.1)", border: "none", color: "#D72638", cursor: "pointer", fontSize: "13px", fontWeight: 600, borderRadius: "6px", padding: "4px 8px", flexShrink: 0 }}>Quitar</button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                  {/* Cantidad con +/- */}
+                  {/* Cantidad: campo editable */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <p style={{ fontSize: "11px", color: theme.muted, margin: 0, fontWeight: 600, textTransform: "uppercase" }}>Cant.</p>
-                      <button style={btnQty} onClick={() => restar(item.producto.id)}>−</button>
                       <input
                         type="number"
                         value={item.cantidad}
-                        min={1}
+                        min={0}
+                        inputMode="numeric"
+                        onFocus={e => e.target.select()}
                         onChange={e => setCantidad(item.producto.id, e.target.value)}
-                        style={{ width: "52px", textAlign: "center", background: item.cantidad > item.producto.stock ? "rgba(245,158,11,0.1)" : theme.card, border: `1.5px solid ${item.cantidad > item.producto.stock ? "#f59e0b" : theme.border}`, borderRadius: "6px", color: theme.text, padding: "5px 4px", fontSize: "15px", fontWeight: 600, outline: "none" }}
+                        style={{ width: "70px", textAlign: "center", background: item.cantidad > item.producto.stock ? "rgba(245,158,11,0.1)" : theme.card, border: `1.5px solid ${item.cantidad > item.producto.stock ? "#f59e0b" : theme.border}`, borderRadius: "6px", color: theme.text, padding: "7px 6px", fontSize: "16px", fontWeight: 700, outline: "none" }}
                       />
-                      <button style={btnQty} onClick={() => sumar(item.producto.id)}>+</button>
                     </div>
                     {/* Advertencia inline justo debajo de la cantidad */}
                     {item.cantidad > item.producto.stock && item.producto.stock > 0 && (
                       <p style={{ fontSize: "11px", color: "#d97706", margin: 0, fontWeight: 600 }}>
-                        ⚠️ Ojo: solo hay {item.producto.stock} en stock
+                        Ojo: solo hay {item.producto.stock} en stock
                       </p>
                     )}
                     {item.producto.stock <= 0 && (
                       <p style={{ fontSize: "11px", color: "#D72638", margin: 0, fontWeight: 600 }}>
-                        🚨 Este producto está agotado
+                        Este producto está agotado
                       </p>
                     )}
                   </div>
@@ -555,6 +549,32 @@ export default function NuevoPedidoPage() {
           </button>
         </div>
       </div>
+
+      {/* Aviso GRANDE de stock insuficiente */}
+      {itemsExceso.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
+          <div style={{ background: theme.card, borderRadius: "16px", padding: "24px", maxWidth: "440px", width: "100%", border: `3px solid #D72638`, boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}>
+            <p style={{ fontSize: "22px", fontWeight: 800, color: "#D72638", margin: "0 0 12px", textAlign: "center" }}>ATENCIÓN</p>
+            <p style={{ fontSize: "16px", fontWeight: 600, color: theme.text, margin: "0 0 14px", textAlign: "center" }}>
+              Estás pidiendo MÁS de lo que hay en el inventario:
+            </p>
+            <div style={{ background: "rgba(215,38,56,0.08)", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px" }}>
+              {itemsExceso.map(i => (
+                <p key={i.producto.id} style={{ fontSize: "14px", color: theme.text, margin: "4px 0", fontWeight: 600 }}>
+                  {i.producto.nombre}: pides <span style={{ color: "#D72638" }}>{i.cantidad}</span>, hay <span style={{ color: "#D72638" }}>{i.producto.stock}</span>
+                </p>
+              ))}
+            </div>
+            <p style={{ fontSize: "13px", color: theme.muted, margin: "0 0 18px", textAlign: "center" }}>
+              ¿Estás seguro de guardar este pedido de todos modos?
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setItemsExceso([])} style={{ flex: 1, padding: "12px", background: theme.cardAlt, color: theme.text, fontWeight: 700, fontSize: "14px", borderRadius: "10px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>No, revisar</button>
+              <button onClick={() => guardar(true)} style={{ flex: 1, padding: "12px", background: "#D72638", color: "white", fontWeight: 700, fontSize: "14px", borderRadius: "10px", border: "none", cursor: "pointer" }}>Sí, guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
