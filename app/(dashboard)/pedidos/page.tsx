@@ -47,7 +47,7 @@ export default function PedidosPage() {
 
     let q = supabase
       .from("pedidos")
-      .select("*, cliente:clientes(*), usuario:usuarios(nombre), items:pedido_items(*, producto:productos(nombre,unidad))")
+      .select("*, cliente:clientes(*), usuario:usuarios(nombre), items:pedido_items(*, producto:productos(codigo,nombre,unidad))")
       .gte("created_at", ini)
       .lte("created_at", fin)
       .order("created_at", { ascending: false })
@@ -155,6 +155,19 @@ export default function PedidosPage() {
     cursor: "pointer",
   }
 
+  function acciones(p: Pedido) {
+    return (
+      <div className="acciones-wrap">
+        {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) &&
+          <button onClick={() => router.push(`/pedidos/nuevo?id=${p.id}`)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Editar</button>}
+        {p.estado === "borrador" && <button onClick={() => cambiarEstado(p.id, "confirmado")} style={{ padding: "5px 10px", background: "rgba(59,130,246,0.15)", color: "#3b82f6", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Confirmar</button>}
+        {isAdmin && p.estado === "confirmado" && <button onClick={() => cambiarEstado(p.id, "entregado")} style={{ padding: "5px 10px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Entregar</button>}
+        {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) && <button onClick={() => cambiarEstado(p.id, "cancelado")} style={{ padding: "5px 10px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Cancelar</button>}
+        {(p.estado === "borrador" || isAdmin) && <button onClick={() => eliminar(p.id)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.muted, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Eliminar</button>}
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -241,8 +254,8 @@ export default function PedidosPage() {
         )}
       </div>
 
-      {/* Tabla */}
-      <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", overflow: "hidden" }}>
+      {/* Tabla (escritorio) */}
+      <div className="pedidos-tabla" style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", overflow: "hidden" }}>
         <div className="tabla-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -272,14 +285,7 @@ export default function PedidosPage() {
                       <span style={{ display: "block", fontSize: "11px", color: theme.muted, opacity: 0.7 }}>{new Date(p.created_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })}</span>
                     </td>
                     <td style={{ padding: "11px 14px" }} onClick={e => e.stopPropagation()}>
-                      <div className="acciones-wrap">
-                        {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) &&
-                          <button onClick={() => router.push(`/pedidos/nuevo?id=${p.id}`)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Editar</button>}
-                        {p.estado === "borrador" && <button onClick={() => cambiarEstado(p.id, "confirmado")} style={{ padding: "5px 10px", background: "rgba(59,130,246,0.15)", color: "#3b82f6", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Confirmar</button>}
-                        {isAdmin && p.estado === "confirmado" && <button onClick={() => cambiarEstado(p.id, "entregado")} style={{ padding: "5px 10px", background: "rgba(34,197,94,0.15)", color: "#16a34a", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Entregar</button>}
-                        {(p.estado === "borrador" || (isAdmin && p.estado === "confirmado")) && <button onClick={() => cambiarEstado(p.id, "cancelado")} style={{ padding: "5px 10px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Cancelar</button>}
-                        {(p.estado === "borrador" || isAdmin) && <button onClick={() => eliminar(p.id)} style={{ padding: "5px 10px", background: theme.cardAlt, color: theme.muted, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer", whiteSpace: "nowrap" }}>Eliminar</button>}
-                      </div>
+                      {acciones(p)}
                     </td>
                   </tr>
                 )
@@ -287,6 +293,37 @@ export default function PedidosPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Tarjetas (móvil) */}
+      <div className="pedidos-cards">
+        {loading ? (
+          <p style={{ padding: "30px", textAlign: "center", color: theme.muted }}>Cargando...</p>
+        ) : filtrados.length === 0 ? (
+          <p style={{ padding: "30px", textAlign: "center", color: theme.muted }}>No hay pedidos en este período</p>
+        ) : filtrados.map(p => {
+          const col = COLOR_ESTADO[p.estado] || COLOR_ESTADO.borrador
+          return (
+            <div key={p.id} onClick={() => setDetalle(p)} style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "14px", cursor: "pointer" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "8px" }}>
+                <p style={{ fontSize: "15px", fontWeight: 700, color: theme.text, margin: 0, flex: 1 }}>{p.cliente?.nombre || "-"}</p>
+                <span style={{ padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: 600, ...col, whiteSpace: "nowrap" }}>{p.estado}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "10px" }}>
+                <div>
+                  <p style={{ fontSize: "12px", color: theme.muted, margin: "0 0 2px" }}>{(p.usuario as unknown as { nombre: string })?.nombre || "-"}</p>
+                  <p style={{ fontSize: "11px", color: theme.muted, opacity: 0.8, margin: 0 }}>
+                    {new Date(p.created_at).toLocaleDateString("es-CO")} · {new Date(p.created_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })}
+                  </p>
+                </div>
+                <p style={{ fontSize: "19px", fontWeight: 800, color: theme.text, margin: 0, whiteSpace: "nowrap" }}>${p.total.toLocaleString("es-CO")}</p>
+              </div>
+              <div onClick={e => e.stopPropagation()} style={{ marginTop: "12px" }}>
+                {acciones(p)}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Detalle modal */}
