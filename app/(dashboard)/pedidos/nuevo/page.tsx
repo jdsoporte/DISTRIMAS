@@ -442,12 +442,12 @@ export default function NuevoPedidoPage() {
         {items.length === 0 ? (
           <p style={{ color: theme.muted, fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Busca y agrega productos al pedido</p>
         ) : (
-          <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ display: "grid", gap: "10px", gridTemplateColumns: "minmax(0, 1fr)" }}>
             {items.map(item => (
               <div key={item.producto.id} style={{ background: theme.cardAlt, borderRadius: "10px", border: `1px solid ${theme.border}`, padding: "12px 14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.producto.nombre}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, wordBreak: "break-word" }}>{item.producto.nombre}</p>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{item.producto.codigo} · {item.producto.unidad}</p>
                       {/* Stock disponible siempre visible */}
