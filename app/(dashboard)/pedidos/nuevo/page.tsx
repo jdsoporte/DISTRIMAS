@@ -210,7 +210,7 @@ export default function NuevoPedidoPage() {
   function agregarProducto(p: Producto) {
     const existe = items.find(i => i.producto.id === p.id)
     if (!existe) {
-      setItems([...items, { producto: p, cantidad: 0, precio_unitario: p.precio }])
+      setItems([{ producto: p, cantidad: 0, precio_unitario: p.precio }, ...items])
     }
     setBuscarProducto(""); setShowProductos(false)
   }
@@ -492,11 +492,11 @@ export default function NuevoPedidoPage() {
                       />
                     </div>
                   </div>
-                  {/* Subtotal */}
-                  <div style={{ marginLeft: "auto" }}>
-                    <p style={{ fontSize: "11px", color: theme.muted, margin: "0 0 1px", textTransform: "uppercase" }}>Subtotal</p>
-                    <p style={{ fontWeight: 700, fontSize: "16px", color: theme.text, margin: 0 }}>${(item.cantidad * item.precio_unitario).toLocaleString("es-CO")}</p>
-                  </div>
+                </div>
+                {/* Subtotal: en su propia línea, etiqueta a la izquierda y valor a la derecha */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "10px", paddingTop: "8px", borderTop: `1px solid ${theme.border}`, gap: "8px" }}>
+                  <span style={{ fontSize: "11px", color: theme.muted, textTransform: "uppercase", fontWeight: 600 }}>Subtotal</span>
+                  <span style={{ fontWeight: 700, fontSize: "16px", color: theme.text, whiteSpace: "nowrap" }}>${(item.cantidad * item.precio_unitario).toLocaleString("es-CO")}</span>
                 </div>
               </div>
             ))}
