@@ -287,11 +287,6 @@ export default function NuevoPedidoPage() {
 
   async function guardar(confirmadoStock = false) {
     if (!clienteId) return setError("Selecciona un cliente")
-    // Ubicación obligatoria solo si el cliente aún no la tiene cargada
-    const cli = clientes.find(c => c.id === clienteId)
-    if (cli && (cli.latitud == null || cli.longitud == null)) {
-      return setError("Este cliente no tiene ubicación guardada. Pulsa \"Guardar ubicación de la tienda\" antes de continuar.")
-    }
     const itemsGuardar = items.filter(i => i.cantidad > 0)
     if (itemsGuardar.length === 0) return setError("Escribe la cantidad de al menos un producto")
 
@@ -435,7 +430,7 @@ export default function NuevoPedidoPage() {
           {(clienteSeleccionado.latitud == null || clienteSeleccionado.longitud == null) ? (
             <div style={{ marginTop: "10px", padding: "12px 14px", background: "rgba(215,38,56,0.06)", border: "1px solid rgba(215,38,56,0.3)", borderRadius: "10px" }}>
               <p style={{ fontSize: "13px", color: "#D72638", fontWeight: 600, margin: "0 0 8px" }}>
-                Este cliente no tiene ubicación guardada. Es obligatorio capturarla para hacer el pedido.
+                Este cliente no tiene ubicación guardada. Si quieres, puedes capturarla ahora.
               </p>
               <button
                 onClick={guardarUbicacionCliente}
