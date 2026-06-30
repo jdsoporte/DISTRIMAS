@@ -12,6 +12,7 @@ const MENUS_ADMIN = [
   { id: "dashboard", label: "Dashboard", href: "/" },
   { id: "pedidos", label: "Pedidos", href: "/pedidos" },
   { id: "estadisticas", label: "Estadísticas", href: "/estadisticas" },
+  { id: "impactos", label: "Impactos", href: "/impactos" },
   { section: "Gestión" },
   { id: "clientes", label: "Clientes", href: "/clientes" },
   { id: "inventario", label: "Inventario", href: "/inventario" },
@@ -40,6 +41,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard", "/pedidos": "Pedidos", "/pedidos/nuevo": "Nuevo pedido",
   "/clientes": "Clientes", "/inventario": "Inventario", "/rutas": "Rutas", "/programacion": "Programación", "/festivos": "Festivos", "/mi-ruta": "Mi ruta de hoy",
   "/usuarios": "Usuarios", "/perfiles": "Perfiles y permisos", "/estadisticas": "Estadísticas",
+  "/impactos": "Impactos por producto y tienda",
   "/configuraciones": "Configuraciones",
 }
 
@@ -171,4 +173,3 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </ThemeContext.Provider>
   )
                          }
-      
