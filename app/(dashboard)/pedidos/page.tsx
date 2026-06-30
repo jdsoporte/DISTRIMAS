@@ -70,12 +70,13 @@ export default function PedidosPage() {
     const hora = ahora.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })
     const lineas = items.map(i => {
       const prod = Array.isArray(i.producto) ? i.producto[0] : i.producto
-      return `• [${prod?.codigo || ""}] ${prod?.nombre || ""} x${i.cantidad} - $${(i.precio_unitario || 0).toLocaleString("es-CO")} = $${((i.cantidad || 0) * (i.precio_unitario || 0)).toLocaleString("es-CO")}`
+      return `• *[${prod?.codigo || ""}]* ${prod?.nombre || ""} x${i.cantidad} - $${(i.precio_unitario || 0).toLocaleString("es-CO")} = $${((i.cantidad || 0) * (i.precio_unitario || 0)).toLocaleString("es-CO")}`
     }).join("\n")
     const msg = [
       `🏪 *PEDIDO - ${config.nombre_empresa || ""}*`,
       ``,
-      `📋 *Cliente:* ${cliente?.nombre || ""} · Cód: ${cliente?.codigo || ""}`,
+      `🔢 *CÓDIGO TIENDA: ${cliente?.codigo || ""}*`,
+      `📋 *Cliente:* ${cliente?.nombre || ""}`,
       ...(cliente?.razon_social ? [`🏬 *Razón social:* ${cliente.razon_social}`] : []),
       `📍 *Municipio:* ${cliente?.municipio || ""}`,
       `👤 *Vendedor:* ${vendedor?.nombre || ""}`,
