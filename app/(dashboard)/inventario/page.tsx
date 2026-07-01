@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme-context"
 import { getSession } from "@/lib/auth"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, activo: true }
+const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, costo: 0, activo: true }
 
 interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number; avisos: string[] }
 
@@ -34,6 +34,10 @@ export default function InventarioPage() {
   const ivaFileRef = useRef<HTMLInputElement>(null)
   const [ivaProcesando, setIvaProcesando] = useState(false)
   const [ivaResumen, setIvaResumen] = useState("")
+
+  const costoFileRef = useRef<HTMLInputElement>(null)
+  const [costoProcesando, setCostoProcesando] = useState(false)
+  const [costoResumen, setCostoResumen] = useState("")
 
   useEffect(() => {
     load()
@@ -78,7 +82,7 @@ export default function InventarioPage() {
     if (!form.nombre?.trim()) return setError("El nombre es requerido")
     if (!form.codigo?.trim()) return setError("El código es requerido")
     setSaving(true); setError("")
-    const payload = { ...form, precio: Number(form.precio), stock: Number(form.stock), stock_minimo: Number(form.stock_minimo), iva: Number(form.iva) }
+    const payload = { ...form, precio: Number(form.precio), stock: Number(form.stock), stock_minimo: Number(form.stock_minimo), iva: Number(form.iva), costo: Number(form.costo) }
     const { error: err } = editando
       ? await supabase.from("productos").update(payload).eq("id", editando)
       : await supabase.from("productos").insert(payload)
@@ -88,6 +92,72 @@ export default function InventarioPage() {
   }
 
   // Importa un archivo (codigo + IVA) y marca el IVA de cada producto por codigo
+  async function importarCostos(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (costoFileRef.current) costoFileRef.current.value = ""
+    if (!file) return
+    setCostoProcesando(true); setCostoResumen("")
+    try {
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+      if (rows.length === 0) { setCostoResumen("El archivo está vacío o no tiene datos."); setCostoProcesando(false); return }
+
+      const col = (r: Record<string, unknown>, ...keys: string[]) => {
+        for (const k of keys) if (r[k] !== undefined && r[k] !== null && r[k] !== "") return r[k]
+        return undefined
+      }
+
+      // Agrupar codigos por su valor de costo (para actualizar en bloque)
+      const porCosto: Record<string, string[]> = {}
+      let sinCodigo = 0, costoInvalido = 0
+      for (const r of rows) {
+        const codigo = String(col(r, "codigo", "Codigo", "CODIGO", "cod", "Cod", "COD") ?? "").trim()
+        const costoRaw = col(r, "costo", "Costo", "COSTO", "valor", "Valor", "VALOR", "precio_compra", "PRECIO_COMPRA")
+        if (!codigo) { sinCodigo++; continue }
+        const costo = Number(String(costoRaw ?? 0).toString().replace(/[^\d.-]/g, ""))
+        if (isNaN(costo)) { costoInvalido++; continue }
+        ;(porCosto[costo] ||= []).push(codigo)
+      }
+
+      if (Object.keys(porCosto).length === 0) {
+        setCostoProcesando(false)
+        setCostoResumen("No se encontraron filas válidas. Revisa que el archivo tenga una columna de código y una de costo.")
+        return
+      }
+
+      let actualizados = 0
+      for (const [costo, codigos] of Object.entries(porCosto)) {
+        for (let i = 0; i < codigos.length; i += 400) {
+          const bloque = codigos.slice(i, i + 400)
+          const { count, error: err } = await supabase.from("productos")
+            .update({ costo: Number(costo) }, { count: "exact" }).in("codigo", bloque)
+          if (err) { setCostoProcesando(false); setCostoResumen("Error al actualizar el costo: " + err.message); return }
+          actualizados += count || 0
+        }
+      }
+
+      setCostoProcesando(false)
+      let txt = `✓ ${actualizados} producto(s) con su costo cargado.`
+      if (sinCodigo > 0) txt += ` ${sinCodigo} fila(s) sin código se omitieron.`
+      if (costoInvalido > 0) txt += ` ${costoInvalido} fila(s) con costo inválido se omitieron.`
+      setCostoResumen(txt)
+      load()
+    } catch {
+      setCostoProcesando(false)
+      setCostoResumen("No se pudo leer el archivo. Asegúrate de que sea un Excel válido.")
+    }
+  }
+
+  function descargarPlantillaCostos() {
+    const ejemplo = [{ CODIGO: "0026", COSTO: 5200 }, { CODIGO: "0103", COSTO: 21000 }]
+    const ws = XLSX.utils.json_to_sheet(ejemplo)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Costos")
+    XLSX.writeFile(wb, "plantilla_costos.xlsx")
+  }
+
   async function importarIVA(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (ivaFileRef.current) ivaFileRef.current.value = ""
@@ -309,11 +379,18 @@ export default function InventarioPage() {
         <div className="page-header-btns">
           <button onClick={exportarExcel} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Exportar Excel</button>
           <button onClick={descargarPlantilla} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Descargar plantilla</button>
-          {isAdmin && <button onClick={() => ivaFileRef.current?.click()} disabled={ivaProcesando} style={{ padding: "10px 16px", background: "rgba(59,130,246,0.12)", color: "#3b82f6", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: ivaProcesando ? 0.6 : 1 }}>{ivaProcesando ? "Importando IVA..." : "Importar IVA"}</button>}
+          {isAdmin && <button onClick={() => ivaFileRef.current?.click()} disabled={ivaProcesando} style={{ padding: "10px 16px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: ivaProcesando ? 0.6 : 1 }}>{ivaProcesando ? "Importando IVA..." : "Importar IVA"}</button>}
           <input ref={ivaFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importarIVA} style={{ display: "none" }} />
+          {isAdmin && <button onClick={() => costoFileRef.current?.click()} disabled={costoProcesando} style={{ padding: "10px 16px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer", opacity: costoProcesando ? 0.6 : 1 }}>{costoProcesando ? "Importando costos..." : "Importar costos"}</button>}
+          <input ref={costoFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importarCostos} style={{ display: "none" }} />
+          {isAdmin && <button onClick={descargarPlantillaCostos} style={{ padding: "10px 16px", background: theme.cardAlt, color: theme.text, fontWeight: 600, fontSize: "13px", borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Plantilla costos</button>}
           <button onClick={() => abrir()} style={{ padding: "10px 20px", background: "#D72638", color: "white", fontWeight: 600, fontSize: "14px", borderRadius: "8px", border: "none", cursor: "pointer" }}>+ Producto</button>
         </div>
       </div>
+
+      {costoResumen && (
+        <div style={{ background: costoResumen.startsWith("✓") ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)", border: `1px solid ${costoResumen.startsWith("✓") ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.3)"}`, color: costoResumen.startsWith("✓") ? "#22c55e" : "#d97706", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "16px" }}>{costoResumen}</div>
+      )}
 
       {ivaResumen && (
         <div style={{ background: ivaResumen.startsWith("✓") ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)", border: `1px solid ${ivaResumen.startsWith("✓") ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.3)"}`, color: ivaResumen.startsWith("✓") ? "#22c55e" : "#d97706", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "16px" }}>{ivaResumen}</div>
@@ -428,7 +505,7 @@ export default function InventarioPage() {
                   <p style={{ fontSize: "11px", color: theme.muted, margin: 0, fontWeight: 600 }}>Nuevos</p>
                 </div>
                 <div style={{ padding: "12px", background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: "10px", textAlign: "center" }}>
-                  <p style={{ fontSize: "22px", fontWeight: 800, color: "#3b82f6", margin: "0 0 2px" }}>{resumen.actualizados}</p>
+                  <p style={{ fontSize: "22px", fontWeight: 800, color: "#D72638", margin: "0 0 2px" }}>{resumen.actualizados}</p>
                   <p style={{ fontSize: "11px", color: theme.muted, margin: 0, fontWeight: 600 }}>Actualizados</p>
                 </div>
                 <div style={{ padding: "12px", background: resumen.errores > 0 ? "rgba(215,38,56,0.08)" : theme.cardAlt, border: `1px solid ${resumen.errores > 0 ? "rgba(215,38,56,0.2)" : theme.border}`, borderRadius: "10px", textAlign: "center" }}>
@@ -485,16 +562,16 @@ export default function InventarioPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "Nombre", "Grupo", "Unidad", "Precio", "IVA", "Sin IVA", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
+                {["Código", "Nombre", "Grupo", "Unidad", "Precio", "IVA", "Sin IVA", "Costo", "Margen", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
+                <tr><td colSpan={13} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
+                <tr><td colSpan={13} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
               ) : filtrados.map(p => {
                 const bajo = p.activo && p.stock < p.stock_minimo
                 return (
@@ -505,9 +582,21 @@ export default function InventarioPage() {
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{p.unidad}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 600, color: theme.text }}>${p.precio.toLocaleString("es-CO")}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px" }}>
-                      <span style={{ padding: "2px 8px", borderRadius: "99px", fontSize: "12px", fontWeight: 600, background: (p.iva || 0) > 0 ? "rgba(59,130,246,0.12)" : theme.cardAlt, color: (p.iva || 0) > 0 ? "#3b82f6" : theme.muted }}>{p.iva || 0}%</span>
+                      <span style={{ padding: "2px 8px", borderRadius: "99px", fontSize: "12px", fontWeight: 600, background: (p.iva || 0) > 0 ? "rgba(215,38,56,0.12)" : theme.cardAlt, color: (p.iva || 0) > 0 ? "#D72638" : theme.muted }}>{p.iva || 0}%</span>
                     </td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>${Math.round(p.precio / (1 + (p.iva || 0) / 100)).toLocaleString("es-CO")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.text }}>${Math.round(p.costo || 0).toLocaleString("es-CO")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "13px" }}>
+                      {(() => {
+                        const sinIva = p.precio / (1 + (p.iva || 0) / 100)
+                        const costo = p.costo || 0
+                        const margen = sinIva - costo
+                        const pct = sinIva > 0 ? (margen / sinIva) * 100 : 0
+                        if (costo <= 0) return <span style={{ color: theme.muted }}>—</span>
+                        const color = margen < 0 ? "#D72638" : "#16a34a"
+                        return <span style={{ color, fontWeight: 600 }}>${Math.round(margen).toLocaleString("es-CO")} <span style={{ fontSize: "11px", opacity: 0.8 }}>({pct.toFixed(0)}%)</span></span>
+                      })()}
+                    </td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{ fontWeight: "bold", fontSize: "15px", color: bajo ? "#f59e0b" : "#22c55e" }}>{p.stock}</span>
                     </td>
@@ -567,6 +656,22 @@ export default function InventarioPage() {
                   <label style={lbl}>Precio sin IVA</label>
                   <div style={{ ...inp, background: theme.card, color: theme.muted, display: "flex", alignItems: "center" }}>
                     ${Math.round(Number(form.precio || 0) / (1 + Number(form.iva || 0) / 100)).toLocaleString("es-CO")}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div><label style={lbl}>Costo (sin IVA)</label><input style={inp} type="number" value={form.costo} onChange={e => f("costo", e.target.value)} min={0} /></div>
+                <div>
+                  <label style={lbl}>Margen</label>
+                  <div style={{ ...inp, background: theme.card, display: "flex", alignItems: "center" }}>
+                    {(() => {
+                      const sinIva = Number(form.precio || 0) / (1 + Number(form.iva || 0) / 100)
+                      const costo = Number(form.costo || 0)
+                      const margen = sinIva - costo
+                      const pct = sinIva > 0 ? (margen / sinIva) * 100 : 0
+                      if (costo <= 0) return <span style={{ color: theme.muted }}>Carga el costo</span>
+                      return <span style={{ color: margen < 0 ? "#D72638" : "#16a34a", fontWeight: 600 }}>${Math.round(margen).toLocaleString("es-CO")} ({pct.toFixed(0)}%)</span>
+                    })()}
                   </div>
                 </div>
               </div>
