@@ -83,6 +83,7 @@ export interface Producto {
   stock_minimo: number
   grupo: string
   iva: number
+  costo?: number
   activo: boolean
 }
 export interface PedidoItem {
