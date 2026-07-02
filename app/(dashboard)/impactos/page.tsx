@@ -28,7 +28,8 @@ async function traerTodo(tabla: string, columnas: string, filtro: (q: any) => an
 interface FilaProducto { id: string; codigo: string; nombre: string; tiendas: number; colocaciones: number }
 interface FilaTienda { id: string; codigo: string; nombre: string; productos: number; lineas: number }
 interface ClienteImpacto { id: string; codigo: string; nombre: string; productos: string[] }
-interface DatosGrupo { grupo: string; clientes: number; productos: number; impactos: number; detalle: ClienteImpacto[] }
+interface FilaVendedor { id: string; nombre: string; costo: number; venta: number; contribucion: number; rentabilidad: number; impactos: number }
+interface DatosGrupo { grupo: string; clientes: number; productos: number; impactos: number; detalle: ClienteImpacto[]; vendedores: FilaVendedor[]; totCosto: number; totVenta: number; totContrib: number; rentTotal: number }
 
 export default function ImpactosPage() {
   const theme = useTheme()
@@ -65,7 +66,7 @@ export default function ImpactosPage() {
     // Pedidos confirmados/entregados en el rango, con sus productos y la tienda
     const pedidos = await traerTodo(
       "pedidos",
-      "id, cliente_id, created_at, cliente:clientes(codigo,nombre,razon_social), items:pedido_items(producto_id, producto:productos(codigo,nombre,grupo))",
+      "id, cliente_id, usuario_id, created_at, cliente:clientes(codigo,nombre,razon_social), usuario:usuarios(nombre), items:pedido_items(producto_id, cantidad, precio_unitario, producto:productos(codigo,nombre,grupo,costo,iva))",
       (q) => q.in("estado", ["confirmado", "entregado"]).gte("created_at", ini).lte("created_at", fin)
     )
 
@@ -73,8 +74,8 @@ export default function ImpactosPage() {
     const prodMap: Record<string, { codigo: string; nombre: string; tiendas: Set<string>; colocaciones: number }> = {}
     const tiendaMap: Record<string, { codigo: string; nombre: string; productos: Set<string>; lineas: number }> = {}
     const paresUnicos = new Set<string>()
-    // Por grupo (proveedor): clientes, productos, impactos y el detalle de qué productos llevó cada cliente
-    const grupoMap: Record<string, { clientes: Set<string>; productos: Set<string>; impactos: Set<string>; porCliente: Record<string, { codigo: string; nombre: string; productos: Set<string> }> }> = {}
+    // Por grupo (proveedor): clientes, productos, impactos, detalle por cliente y desglose por vendedor
+    const grupoMap: Record<string, { clientes: Set<string>; productos: Set<string>; impactos: Set<string>; porCliente: Record<string, { codigo: string; nombre: string; productos: Set<string> }>; vendedores: Record<string, { nombre: string; costo: number; ventaSinIva: number; clientes: Set<string> }> }> = {}
 
     for (const p of pedidos) {
       const cli = rel(p.cliente)
@@ -97,12 +98,24 @@ export default function ImpactosPage() {
 
         // Por proveedor (grupo)
         const grupo = (prod?.grupo || "").toString().trim() || "Sin grupo"
-        if (!grupoMap[grupo]) grupoMap[grupo] = { clientes: new Set(), productos: new Set(), impactos: new Set(), porCliente: {} }
+        if (!grupoMap[grupo]) grupoMap[grupo] = { clientes: new Set(), productos: new Set(), impactos: new Set(), porCliente: {}, vendedores: {} }
         grupoMap[grupo].clientes.add(cliId)
         grupoMap[grupo].productos.add(prodId)
         grupoMap[grupo].impactos.add(`${prodId}|${cliId}`)
         if (!grupoMap[grupo].porCliente[cliId]) grupoMap[grupo].porCliente[cliId] = { codigo: cli?.codigo || "", nombre: cli?.nombre || "Sin nombre", productos: new Set() }
         grupoMap[grupo].porCliente[cliId].productos.add(prod?.nombre || "Sin nombre")
+
+        // Desglose por vendedor: costo, venta sin IVA y clientes impactados
+        const vendId = p.usuario_id || "sin"
+        const vendNombre = rel(p.usuario)?.nombre || "Sin vendedor"
+        const cantidad = it.cantidad || 0
+        const iva = prod?.iva || 0
+        const costoU = prod?.costo || 0
+        const precioSinIva = (it.precio_unitario || 0) / (1 + iva / 100)
+        if (!grupoMap[grupo].vendedores[vendId]) grupoMap[grupo].vendedores[vendId] = { nombre: vendNombre, costo: 0, ventaSinIva: 0, clientes: new Set() }
+        grupoMap[grupo].vendedores[vendId].costo += costoU * cantidad
+        grupoMap[grupo].vendedores[vendId].ventaSinIva += precioSinIva * cantidad
+        grupoMap[grupo].vendedores[vendId].clientes.add(cliId)
 
         // Par único producto-tienda = 1 impacto
         paresUnicos.add(`${prodId}|${cliId}`)
@@ -123,6 +136,18 @@ export default function ImpactosPage() {
 
     const gd: Record<string, DatosGrupo> = {}
     Object.entries(grupoMap).forEach(([grupo, v]) => {
+      const vendedores: FilaVendedor[] = Object.entries(v.vendedores).map(([id, vd]) => {
+        const contribucion = vd.ventaSinIva - vd.costo
+        return {
+          id, nombre: vd.nombre,
+          costo: vd.costo, venta: vd.ventaSinIva, contribucion,
+          rentabilidad: vd.ventaSinIva > 0 ? (contribucion / vd.ventaSinIva) * 100 : 0,
+          impactos: vd.clientes.size,
+        }
+      }).sort((a, b) => b.venta - a.venta)
+      const totCosto = vendedores.reduce((a, x) => a + x.costo, 0)
+      const totVenta = vendedores.reduce((a, x) => a + x.venta, 0)
+      const totContrib = totVenta - totCosto
       gd[grupo] = {
         grupo,
         clientes: v.clientes.size,
@@ -131,6 +156,9 @@ export default function ImpactosPage() {
         detalle: Object.entries(v.porCliente)
           .map(([id, c]) => ({ id, codigo: c.codigo, nombre: c.nombre, productos: [...c.productos].sort() }))
           .sort((a, b) => b.productos.length - a.productos.length),
+        vendedores,
+        totCosto, totVenta, totContrib,
+        rentTotal: totVenta > 0 ? (totContrib / totVenta) * 100 : 0,
       }
     })
     setGruposData(gd)
@@ -175,8 +203,18 @@ export default function ImpactosPage() {
       rows = porTienda.map((t, i) => ({ "#": i + 1, "Codigo": t.codigo, "Tienda": t.nombre, "Referencias distintas": t.productos, "Lineas totales": t.lineas }))
     } else {
       const g = gruposData[grupoSel]
-      hoja = `Grupo ${grupoSel}`.slice(0, 31); archivo = `impactos_proveedor_${grupoSel}_${periodo}.xlsx`
-      if (g) rows = g.detalle.map((c, i) => ({ "#": i + 1, "Codigo tienda": c.codigo, "Tienda": c.nombre, "Cantidad productos": c.productos.length, "Productos": c.productos.join("; ") }))
+      if (!g) { alert("No hay datos para exportar en este período."); return }
+      const wb = XLSX.utils.book_new()
+      const rowsV: Record<string, string | number>[] = g.vendedores.map(v => ({
+        "Vendedor": v.nombre, "Costo": Math.round(v.costo), "Venta sin IVA": Math.round(v.venta),
+        "Contribucion": Math.round(v.contribucion), "Rentabilidad %": Number(v.rentabilidad.toFixed(1)), "Impactos": v.impactos,
+      }))
+      rowsV.push({ "Vendedor": "TOTAL", "Costo": Math.round(g.totCosto), "Venta sin IVA": Math.round(g.totVenta), "Contribucion": Math.round(g.totContrib), "Rentabilidad %": Number(g.rentTotal.toFixed(1)), "Impactos": g.clientes })
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsV), "Por vendedor")
+      const rowsC = g.detalle.map((c, i) => ({ "#": i + 1, "Codigo tienda": c.codigo, "Tienda": c.nombre, "Cantidad productos": c.productos.length, "Productos": c.productos.join("; ") }))
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsC.length ? rowsC : [{ "Sin datos": "" }]), "Tiendas")
+      XLSX.writeFile(wb, `impactos_proveedor_${grupoSel}_${periodo}.xlsx`)
+      return
     }
     if (rows.length === 0) { alert("No hay datos para exportar en este período."); return }
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -197,26 +235,37 @@ export default function ImpactosPage() {
       filas = porTienda.map((t, i) => `<tr><td>${i + 1}</td><td>${esc(t.codigo)}</td><td>${esc(t.nombre)}</td><td style="text-align:center">${t.productos}</td><td style="text-align:center">${t.lineas}</td></tr>`).join("")
     } else {
       const g = gruposData[grupoSel]
-      titulo = `Impactos del proveedor · Grupo ${esc(grupoSel)}`
-      if (g) resumen = `<p><b>${g.clientes}</b> tiendas impactadas · <b>${g.productos}</b> productos vendidos · <b>${g.impactos}</b> impactos</p>`
-      encabezados = "<th>#</th><th>Código</th><th>Tienda</th><th>Productos que llevó</th>"
-      filas = g ? g.detalle.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.codigo)}</td><td>${esc(c.nombre)}</td><td>${esc(c.productos.join(", "))}</td></tr>`).join("") : ""
+      if (!g) { alert("No hay datos para exportar en este período."); return }
+      const money = (n: number) => "$" + Math.round(n).toLocaleString("es-CO")
+      const filasV = g.vendedores.map(v => `<tr><td>${esc(v.nombre)}</td><td style="text-align:right">${money(v.costo)}</td><td style="text-align:right">${money(v.venta)}</td><td style="text-align:right">${money(v.contribucion)}</td><td style="text-align:right">${v.rentabilidad.toFixed(1)}%</td><td style="text-align:center">${v.impactos}</td></tr>`).join("")
+      const filaTot = `<tr style="font-weight:bold;background:#eee"><td>TOTAL</td><td style="text-align:right">${money(g.totCosto)}</td><td style="text-align:right">${money(g.totVenta)}</td><td style="text-align:right">${money(g.totContrib)}</td><td style="text-align:right">${g.rentTotal.toFixed(1)}%</td><td style="text-align:center">${g.clientes}</td></tr>`
+      const filasC = g.detalle.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.codigo)}</td><td>${esc(c.nombre)}</td><td>${esc(c.productos.join(", "))}</td></tr>`).join("")
+      const cuerpo = `
+        <h2 style="font-size:14px;margin:16px 0 4px">Desglose por vendedor</h2>
+        <table><thead><tr><th>Vendedor</th><th>Costo</th><th>Venta sin IVA</th><th>Contribución</th><th>Rentab.</th><th>Impactos</th></tr></thead><tbody>${filasV}${filaTot}</tbody></table>
+        <h2 style="font-size:14px;margin:18px 0 4px">Tiendas impactadas y sus productos</h2>
+        <table><thead><tr><th>#</th><th>Código</th><th>Tienda</th><th>Productos que llevó</th></tr></thead><tbody>${filasC}</tbody></table>`
+      imprimirHTML(`Impactos del proveedor · Grupo ${esc(grupoSel)}`, `<p><b>${g.clientes}</b> tiendas impactadas · <b>${g.productos}</b> productos vendidos · <b>${g.impactos}</b> impactos</p>` + cuerpo)
+      return
     }
     if (!filas) { alert("No hay datos para exportar en este período."); return }
+    imprimirHTML(titulo, `${resumen}<table><thead><tr>${encabezados}</tr></thead><tbody>${filas}</tbody></table>`)
+  }
+
+  function imprimirHTML(titulo: string, cuerpo: string) {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo}</title>
       <style>
         body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:24px}
         h1{font-size:18px;margin:0 0 4px;color:#D72638}
+        h2{color:#333}
         p{font-size:12px;color:#555;margin:2px 0}
-        table{width:100%;border-collapse:collapse;margin-top:14px;font-size:11px}
+        table{width:100%;border-collapse:collapse;margin-top:6px;font-size:11px}
         th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
         th{background:#D72638;color:#fff}
-        tr:nth-child(even){background:#f7f7f7}
       </style></head><body>
       <h1>${titulo}</h1>
       <p>Período: ${desde} a ${hasta}</p>
-      ${resumen}
-      <table><thead><tr>${encabezados}</tr></thead><tbody>${filas}</tbody></table>
+      ${cuerpo}
       </body></html>`
     const win = window.open("", "_blank")
     if (!win) { alert("Permite las ventanas emergentes para poder generar el PDF."); return }
@@ -337,6 +386,43 @@ export default function ImpactosPage() {
                 {tarjeta(gruposData[grupoSel].clientes.toLocaleString("es-CO"), "Tiendas impactadas")}
                 {tarjeta(gruposData[grupoSel].productos.toLocaleString("es-CO"), "Productos vendidos")}
                 {tarjeta(gruposData[grupoSel].impactos.toLocaleString("es-CO"), "Impactos totales")}
+              </div>
+
+              {/* Desglose por vendedor (costo, venta, contribución, rentabilidad, impactos) */}
+              <p style={{ fontSize: "13px", fontWeight: 700, color: theme.text, margin: "0 0 8px" }}>Desglose por vendedor</p>
+              <div className="tabla-wrap" style={{ marginBottom: "20px", border: `1px solid ${theme.border}`, borderRadius: "10px", overflow: "hidden" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", minWidth: "560px" }}>
+                  <thead>
+                    <tr style={{ background: theme.cardAlt }}>
+                      <th style={{ textAlign: "left", padding: "9px 10px", color: theme.muted, fontWeight: 700 }}>Vendedor</th>
+                      <th style={{ textAlign: "right", padding: "9px 10px", color: theme.muted, fontWeight: 700 }}>Costo</th>
+                      <th style={{ textAlign: "right", padding: "9px 10px", color: theme.muted, fontWeight: 700 }}>Venta (sin IVA)</th>
+                      <th style={{ textAlign: "right", padding: "9px 10px", color: theme.muted, fontWeight: 700 }}>Contribución</th>
+                      <th style={{ textAlign: "right", padding: "9px 10px", color: theme.muted, fontWeight: 700 }}>Rentab.</th>
+                      <th style={{ textAlign: "center", padding: "9px 10px", color: theme.muted, fontWeight: 700 }}>Impactos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gruposData[grupoSel].vendedores.map(v => (
+                      <tr key={v.id} style={{ borderTop: `1px solid ${theme.border}` }}>
+                        <td style={{ padding: "9px 10px", color: theme.text, fontWeight: 600 }}>{v.nombre}</td>
+                        <td style={{ padding: "9px 10px", textAlign: "right", color: theme.text }}>${Math.round(v.costo).toLocaleString("es-CO")}</td>
+                        <td style={{ padding: "9px 10px", textAlign: "right", color: theme.text }}>${Math.round(v.venta).toLocaleString("es-CO")}</td>
+                        <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 700, color: v.contribucion < 0 ? "#D72638" : "#16a34a" }}>${Math.round(v.contribucion).toLocaleString("es-CO")}</td>
+                        <td style={{ padding: "9px 10px", textAlign: "right", color: theme.text }}>{v.rentabilidad.toFixed(1)}%</td>
+                        <td style={{ padding: "9px 10px", textAlign: "center", fontWeight: 800, color: "#D72638" }}>{v.impactos}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ borderTop: `2px solid ${theme.border}`, background: theme.cardAlt }}>
+                      <td style={{ padding: "9px 10px", color: theme.text, fontWeight: 800 }}>TOTAL</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 800, color: theme.text }}>${Math.round(gruposData[grupoSel].totCosto).toLocaleString("es-CO")}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 800, color: theme.text }}>${Math.round(gruposData[grupoSel].totVenta).toLocaleString("es-CO")}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 800, color: gruposData[grupoSel].totContrib < 0 ? "#D72638" : "#16a34a" }}>${Math.round(gruposData[grupoSel].totContrib).toLocaleString("es-CO")}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 800, color: theme.text }}>{gruposData[grupoSel].rentTotal.toFixed(1)}%</td>
+                      <td style={{ padding: "9px 10px", textAlign: "center", fontWeight: 800, color: "#D72638" }}>{gruposData[grupoSel].clientes}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               <p style={{ fontSize: "13px", fontWeight: 700, color: theme.text, margin: "0 0 10px" }}>
