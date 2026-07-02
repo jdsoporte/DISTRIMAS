@@ -95,7 +95,7 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
       .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%,razon_social.ilike.%${term}%,municipio.ilike.%${term}%`)
       .order("nombre")
       .limit(100)
-    setResultados(((data || []) as ClienteRuta[]).filter(c => c.ruta_id !== ruta.id))
+    setResultados((data || []) as ClienteRuta[])
     setBuscando(false)
   }
 
@@ -158,17 +158,22 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
             <div style={{ marginTop: "8px", border: `1px solid ${theme.border}`, borderRadius: "8px", maxHeight: "180px", overflowY: "auto" }}>
               {resultados.map(c => {
                 const rActual = nombreRuta(c)
+                const yaAqui = c.ruta_id === ruta.id
                 return (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${theme.border}`, gap: "10px" }}>
+                <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${theme.border}`, gap: "10px", background: yaAqui ? "rgba(34,197,94,0.06)" : "transparent" }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: "13px", fontWeight: 600, color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
                     {c.razon_social && <p style={{ fontSize: "11px", color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.razon_social}</p>}
                     <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}</p>
-                    <p style={{ fontSize: "11px", margin: "2px 0 0", fontWeight: 600, color: rActual ? "#d97706" : "#16a34a" }}>
-                      {rActual ? `Ruta actual: ${rActual}` : "Sin ruta asignada"}
+                    <p style={{ fontSize: "11px", margin: "2px 0 0", fontWeight: 600, color: yaAqui ? "#16a34a" : (rActual ? "#d97706" : "#16a34a") }}>
+                      {yaAqui ? "Ya está en esta ruta" : (rActual ? `Ruta actual: ${rActual}` : "Sin ruta asignada")}
                     </p>
                   </div>
-                  <button onClick={() => agregarCliente(c)} disabled={trabajando} style={{ padding: "5px 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{rActual ? "Mover aquí" : "Agregar"}</button>
+                  {yaAqui ? (
+                    <span style={{ padding: "5px 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", fontSize: "12px", fontWeight: 600, borderRadius: "6px", whiteSpace: "nowrap", flexShrink: 0 }}>Aquí</span>
+                  ) : (
+                    <button onClick={() => agregarCliente(c)} disabled={trabajando} style={{ padding: "5px 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{rActual ? "Mover aquí" : "Agregar"}</button>
+                  )}
                 </div>
                 )
               })}
