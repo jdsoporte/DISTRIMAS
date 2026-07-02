@@ -12,6 +12,12 @@ interface ClienteRuta {
   direccion: string
   municipio: string
   ruta_id: string | null
+  ruta?: { nombre: string } | { nombre: string }[] | null
+}
+
+const nombreRuta = (c: ClienteRuta) => {
+  const r = Array.isArray(c.ruta) ? c.ruta[0] : c.ruta
+  return r?.nombre || null
 }
 
 export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta: Ruta; onClose: () => void; onCambio: () => void }) {
@@ -83,12 +89,13 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
     setBuscar(q)
     if (q.trim().length < 2) { setResultados([]); return }
     setBuscando(true)
-    const term = q.trim()
+    const term = q.trim().replace(/[%,]/g, "")
     const { data } = await supabase
-      .from("clientes").select("id, codigo, nombre, razon_social, direccion, municipio, ruta_id")
+      .from("clientes").select("id, codigo, nombre, razon_social, direccion, municipio, ruta_id, ruta:rutas(nombre)")
       .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%,razon_social.ilike.%${term}%,municipio.ilike.%${term}%`)
-      .limit(30)
-    setResultados((data || []).filter(c => c.ruta_id !== ruta.id))
+      .order("nombre")
+      .limit(100)
+    setResultados(((data || []) as ClienteRuta[]).filter(c => c.ruta_id !== ruta.id))
     setBuscando(false)
   }
 
@@ -149,16 +156,22 @@ export default function GestionClientesRuta({ ruta, onClose, onCambio }: { ruta:
           {buscando && <p style={{ fontSize: "12px", color: theme.muted, margin: "8px 0 0" }}>Buscando...</p>}
           {resultados.length > 0 && (
             <div style={{ marginTop: "8px", border: `1px solid ${theme.border}`, borderRadius: "8px", maxHeight: "180px", overflowY: "auto" }}>
-              {resultados.map(c => (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${theme.border}` }}>
+              {resultados.map(c => {
+                const rActual = nombreRuta(c)
+                return (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: `1px solid ${theme.border}`, gap: "10px" }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: "13px", fontWeight: 600, color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
                     {c.razon_social && <p style={{ fontSize: "11px", color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.razon_social}</p>}
-                    <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}{c.direccion ? " · " + c.direccion : ""}</p>
+                    <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}</p>
+                    <p style={{ fontSize: "11px", margin: "2px 0 0", fontWeight: 600, color: rActual ? "#d97706" : "#16a34a" }}>
+                      {rActual ? `Ruta actual: ${rActual}` : "Sin ruta asignada"}
+                    </p>
                   </div>
-                  <button onClick={() => agregarCliente(c)} disabled={trabajando} style={{ padding: "5px 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>Agregar</button>
+                  <button onClick={() => agregarCliente(c)} disabled={trabajando} style={{ padding: "5px 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{rActual ? "Mover aquí" : "Agregar"}</button>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
           {buscar.trim().length >= 2 && !buscando && resultados.length === 0 && (
