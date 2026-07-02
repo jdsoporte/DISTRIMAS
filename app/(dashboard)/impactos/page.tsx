@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useTheme } from "@/lib/theme-context"
+import * as XLSX from "xlsx"
 
 const rel = (v: any) => Array.isArray(v) ? v[0] : v
 function hoyCol() { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" }) }
@@ -159,6 +160,72 @@ export default function ImpactosPage() {
   const prodFiltrado = q ? porProducto.filter(p => p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)) : porProducto
   const tiendaFiltrada = q ? porTienda.filter(t => t.nombre.toLowerCase().includes(q) || t.codigo.toLowerCase().includes(q)) : porTienda
 
+  const periodo = `${desde}_a_${hasta}`
+  const esc = (s: string) => (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+  function exportarExcel() {
+    let rows: Record<string, string | number>[] = []
+    let hoja = ""
+    let archivo = ""
+    if (vista === "producto") {
+      hoja = "Por producto"; archivo = `impactos_por_producto_${periodo}.xlsx`
+      rows = porProducto.map((p, i) => ({ "#": i + 1, "Codigo": p.codigo, "Producto": p.nombre, "Tiendas impactadas": p.tiendas, "Colocaciones": p.colocaciones }))
+    } else if (vista === "tienda") {
+      hoja = "Por tienda"; archivo = `impactos_por_tienda_${periodo}.xlsx`
+      rows = porTienda.map((t, i) => ({ "#": i + 1, "Codigo": t.codigo, "Tienda": t.nombre, "Referencias distintas": t.productos, "Lineas totales": t.lineas }))
+    } else {
+      const g = gruposData[grupoSel]
+      hoja = `Grupo ${grupoSel}`.slice(0, 31); archivo = `impactos_proveedor_${grupoSel}_${periodo}.xlsx`
+      if (g) rows = g.detalle.map((c, i) => ({ "#": i + 1, "Codigo tienda": c.codigo, "Tienda": c.nombre, "Cantidad productos": c.productos.length, "Productos": c.productos.join("; ") }))
+    }
+    if (rows.length === 0) { alert("No hay datos para exportar en este período."); return }
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, hoja || "Hoja1")
+    XLSX.writeFile(wb, archivo)
+  }
+
+  function exportarPDF() {
+    let titulo = ""; let encabezados = ""; let filas = ""; let resumen = ""
+    if (vista === "producto") {
+      titulo = "Impactos por producto"
+      encabezados = "<th>#</th><th>Código</th><th>Producto</th><th>Tiendas</th><th>Colocaciones</th>"
+      filas = porProducto.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.codigo)}</td><td>${esc(p.nombre)}</td><td style="text-align:center">${p.tiendas}</td><td style="text-align:center">${p.colocaciones}</td></tr>`).join("")
+    } else if (vista === "tienda") {
+      titulo = "Impactos por tienda"
+      encabezados = "<th>#</th><th>Código</th><th>Tienda</th><th>Referencias</th><th>Líneas</th>"
+      filas = porTienda.map((t, i) => `<tr><td>${i + 1}</td><td>${esc(t.codigo)}</td><td>${esc(t.nombre)}</td><td style="text-align:center">${t.productos}</td><td style="text-align:center">${t.lineas}</td></tr>`).join("")
+    } else {
+      const g = gruposData[grupoSel]
+      titulo = `Impactos del proveedor · Grupo ${esc(grupoSel)}`
+      if (g) resumen = `<p><b>${g.clientes}</b> tiendas impactadas · <b>${g.productos}</b> productos vendidos · <b>${g.impactos}</b> impactos</p>`
+      encabezados = "<th>#</th><th>Código</th><th>Tienda</th><th>Productos que llevó</th>"
+      filas = g ? g.detalle.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.codigo)}</td><td>${esc(c.nombre)}</td><td>${esc(c.productos.join(", "))}</td></tr>`).join("") : ""
+    }
+    if (!filas) { alert("No hay datos para exportar en este período."); return }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:24px}
+        h1{font-size:18px;margin:0 0 4px;color:#D72638}
+        p{font-size:12px;color:#555;margin:2px 0}
+        table{width:100%;border-collapse:collapse;margin-top:14px;font-size:11px}
+        th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+        th{background:#D72638;color:#fff}
+        tr:nth-child(even){background:#f7f7f7}
+      </style></head><body>
+      <h1>${titulo}</h1>
+      <p>Período: ${desde} a ${hasta}</p>
+      ${resumen}
+      <table><thead><tr>${encabezados}</tr></thead><tbody>${filas}</tbody></table>
+      </body></html>`
+    const win = window.open("", "_blank")
+    if (!win) { alert("Permite las ventanas emergentes para poder generar el PDF."); return }
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => win.print(), 400)
+  }
+
   return (
     <div style={{ maxWidth: "900px" }}>
       <p style={{ fontSize: "13px", color: theme.muted, margin: "0 0 16px" }}>
@@ -188,6 +255,13 @@ export default function ImpactosPage() {
         {tab("Por producto", "producto")}
         {tab("Por tienda", "tienda")}
         {tab("Por proveedor", "proveedor")}
+      </div>
+
+      {/* Exportar */}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
+        <button onClick={exportarExcel} disabled={loading} style={{ padding: "8px 14px", background: "rgba(22,163,74,0.12)", color: "#16a34a", fontSize: "13px", fontWeight: 700, borderRadius: "8px", border: "none", cursor: "pointer", opacity: loading ? 0.5 : 1 }}>Exportar Excel</button>
+        <button onClick={exportarPDF} disabled={loading} style={{ padding: "8px 14px", background: "rgba(215,38,56,0.1)", color: "#D72638", fontSize: "13px", fontWeight: 700, borderRadius: "8px", border: "none", cursor: "pointer", opacity: loading ? 0.5 : 1 }}>Exportar PDF</button>
+        <span style={{ fontSize: "11px", color: theme.muted, alignSelf: "center" }}>Exporta la vista que tienes abierta</span>
       </div>
 
       {/* Buscador (solo en producto/tienda) */}
