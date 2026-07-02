@@ -24,8 +24,31 @@ export default function RutasPage() {
   const [modalAgrupar, setModalAgrupar] = useState(false)
   const [nombreGrupo, setNombreGrupo] = useState("")
   const [rutaClientes, setRutaClientes] = useState<Ruta | null>(null)
+  // Buscador global: en qué ruta está un cliente
+  const [buscarCliente, setBuscarCliente] = useState("")
+  const [resultadosCliente, setResultadosCliente] = useState<{ id: string; codigo: string; nombre: string; razon_social: string; municipio: string; ruta_id: string | null; ruta?: { nombre: string } | { nombre: string }[] | null }[]>([])
+  const [buscandoCliente, setBuscandoCliente] = useState(false)
 
   useEffect(() => { load() }, [])
+
+  async function buscarClienteEnRutas(q: string) {
+    setBuscarCliente(q)
+    if (q.trim().length < 2) { setResultadosCliente([]); return }
+    setBuscandoCliente(true)
+    const term = q.trim().replace(/[%,]/g, "")
+    const { data } = await supabase
+      .from("clientes").select("id, codigo, nombre, razon_social, municipio, ruta_id, ruta:rutas(nombre)")
+      .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%,razon_social.ilike.%${term}%`)
+      .order("nombre").limit(50)
+    setResultadosCliente((data as typeof resultadosCliente) || [])
+    setBuscandoCliente(false)
+  }
+
+  function irARutaDeCliente(rutaId: string | null) {
+    if (!rutaId) return
+    const r = rutas.find(x => x.id === rutaId)
+    if (r) setRutaClientes(r)
+  }
 
   async function load() {
     setLoading(true)
@@ -234,6 +257,38 @@ export default function RutasPage() {
           {msg}
         </div>
       )}
+
+      {/* Buscar en qué ruta está un cliente */}
+      <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+        <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "8px" }}>¿En qué ruta está un cliente?</label>
+        <input value={buscarCliente} onChange={e => buscarClienteEnRutas(e.target.value)} placeholder="Escribe el nombre o el código del cliente..." style={inp} />
+        {buscandoCliente && <p style={{ fontSize: "12px", color: theme.muted, margin: "8px 0 0" }}>Buscando...</p>}
+        {resultadosCliente.length > 0 && (
+          <div style={{ marginTop: "10px", border: `1px solid ${theme.border}`, borderRadius: "8px", maxHeight: "260px", overflowY: "auto" }}>
+            {resultadosCliente.map(c => {
+              const r = Array.isArray(c.ruta) ? c.ruta[0] : c.ruta
+              const nom = r?.nombre || null
+              return (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: `1px solid ${theme.border}`, gap: "10px" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</p>
+                    <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>{c.codigo} · {c.municipio}</p>
+                    <p style={{ fontSize: "12px", margin: "2px 0 0", fontWeight: 700, color: nom ? "#d97706" : "#D72638" }}>
+                      {nom ? `Está en la ruta: ${nom}` : "Este cliente no tiene ruta asignada"}
+                    </p>
+                  </div>
+                  {c.ruta_id && (
+                    <button onClick={() => irARutaDeCliente(c.ruta_id)} style={{ padding: "6px 12px", background: "rgba(59,130,246,0.12)", color: "#3b82f6", fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: "none", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Ver esa ruta</button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {buscarCliente.trim().length >= 2 && !buscandoCliente && resultadosCliente.length === 0 && (
+          <p style={{ fontSize: "12px", color: theme.muted, margin: "8px 0 0" }}>No se encontró ningún cliente con ese nombre o código.</p>
+        )}
+      </div>
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
         <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar ruta..." style={{ ...inp, maxWidth: "340px" }} />
