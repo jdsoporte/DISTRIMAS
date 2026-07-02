@@ -26,18 +26,22 @@ async function traerTodo(tabla: string, columnas: string, filtro: (q: any) => an
 
 interface FilaProducto { id: string; codigo: string; nombre: string; tiendas: number; colocaciones: number }
 interface FilaTienda { id: string; codigo: string; nombre: string; productos: number; lineas: number }
+interface ClienteImpacto { id: string; codigo: string; nombre: string; productos: string[] }
+interface DatosGrupo { grupo: string; clientes: number; productos: number; impactos: number; detalle: ClienteImpacto[] }
 
 export default function ImpactosPage() {
   const theme = useTheme()
   const [desde, setDesde] = useState(primerDiaMes())
   const [hasta, setHasta] = useState(hoyCol())
   const [loading, setLoading] = useState(true)
-  const [vista, setVista] = useState<"producto" | "tienda">("producto")
+  const [vista, setVista] = useState<"producto" | "tienda" | "proveedor">("producto")
   const [buscar, setBuscar] = useState("")
 
   const [porProducto, setPorProducto] = useState<FilaProducto[]>([])
   const [porTienda, setPorTienda] = useState<FilaTienda[]>([])
   const [totalImpactos, setTotalImpactos] = useState(0)
+  const [gruposData, setGruposData] = useState<Record<string, DatosGrupo>>({})
+  const [grupoSel, setGrupoSel] = useState("")
 
   useEffect(() => { cargar() }, [desde, hasta])
 
@@ -60,7 +64,7 @@ export default function ImpactosPage() {
     // Pedidos confirmados/entregados en el rango, con sus productos y la tienda
     const pedidos = await traerTodo(
       "pedidos",
-      "id, cliente_id, created_at, cliente:clientes(codigo,nombre,razon_social), items:pedido_items(producto_id, producto:productos(codigo,nombre))",
+      "id, cliente_id, created_at, cliente:clientes(codigo,nombre,razon_social), items:pedido_items(producto_id, producto:productos(codigo,nombre,grupo))",
       (q) => q.in("estado", ["confirmado", "entregado"]).gte("created_at", ini).lte("created_at", fin)
     )
 
@@ -68,6 +72,8 @@ export default function ImpactosPage() {
     const prodMap: Record<string, { codigo: string; nombre: string; tiendas: Set<string>; colocaciones: number }> = {}
     const tiendaMap: Record<string, { codigo: string; nombre: string; productos: Set<string>; lineas: number }> = {}
     const paresUnicos = new Set<string>()
+    // Por grupo (proveedor): clientes, productos, impactos y el detalle de qué productos llevó cada cliente
+    const grupoMap: Record<string, { clientes: Set<string>; productos: Set<string>; impactos: Set<string>; porCliente: Record<string, { codigo: string; nombre: string; productos: Set<string> }> }> = {}
 
     for (const p of pedidos) {
       const cli = rel(p.cliente)
@@ -88,6 +94,15 @@ export default function ImpactosPage() {
         tiendaMap[cliId].productos.add(prodId)
         tiendaMap[cliId].lineas++
 
+        // Por proveedor (grupo)
+        const grupo = (prod?.grupo || "").toString().trim() || "Sin grupo"
+        if (!grupoMap[grupo]) grupoMap[grupo] = { clientes: new Set(), productos: new Set(), impactos: new Set(), porCliente: {} }
+        grupoMap[grupo].clientes.add(cliId)
+        grupoMap[grupo].productos.add(prodId)
+        grupoMap[grupo].impactos.add(`${prodId}|${cliId}`)
+        if (!grupoMap[grupo].porCliente[cliId]) grupoMap[grupo].porCliente[cliId] = { codigo: cli?.codigo || "", nombre: cli?.nombre || "Sin nombre", productos: new Set() }
+        grupoMap[grupo].porCliente[cliId].productos.add(prod?.nombre || "Sin nombre")
+
         // Par único producto-tienda = 1 impacto
         paresUnicos.add(`${prodId}|${cliId}`)
       }
@@ -104,6 +119,21 @@ export default function ImpactosPage() {
     setPorProducto(listaProd)
     setPorTienda(listaTienda)
     setTotalImpactos(paresUnicos.size)
+
+    const gd: Record<string, DatosGrupo> = {}
+    Object.entries(grupoMap).forEach(([grupo, v]) => {
+      gd[grupo] = {
+        grupo,
+        clientes: v.clientes.size,
+        productos: v.productos.size,
+        impactos: v.impactos.size,
+        detalle: Object.entries(v.porCliente)
+          .map(([id, c]) => ({ id, codigo: c.codigo, nombre: c.nombre, productos: [...c.productos].sort() }))
+          .sort((a, b) => b.productos.length - a.productos.length),
+      }
+    })
+    setGruposData(gd)
+    setGrupoSel(prev => (prev && gd[prev]) ? prev : (Object.keys(gd).sort()[0] || ""))
     setLoading(false)
   }
 
@@ -118,7 +148,7 @@ export default function ImpactosPage() {
     </div>
   )
 
-  const tab = (label: string, val: "producto" | "tienda") => (
+  const tab = (label: string, val: "producto" | "tienda" | "proveedor") => (
     <button
       onClick={() => { setVista(val); setBuscar("") }}
       style={{ flex: 1, padding: "10px", background: vista === val ? "#D72638" : theme.cardAlt, color: vista === val ? "white" : theme.text, fontWeight: 700, fontSize: "13px", borderRadius: "8px", border: vista === val ? "none" : `1px solid ${theme.border}`, cursor: "pointer" }}
@@ -157,15 +187,18 @@ export default function ImpactosPage() {
       <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
         {tab("Por producto", "producto")}
         {tab("Por tienda", "tienda")}
+        {tab("Por proveedor", "proveedor")}
       </div>
 
-      {/* Buscador */}
-      <input
-        value={buscar}
-        onChange={e => setBuscar(e.target.value)}
-        placeholder={vista === "producto" ? "Buscar producto por nombre o código..." : "Buscar tienda por nombre o código..."}
-        style={{ width: "100%", boxSizing: "border-box", background: theme.card, border: `1.5px solid ${theme.border}`, borderRadius: "10px", color: theme.text, fontSize: "14px", padding: "11px 14px", outline: "none", marginBottom: "14px" }}
-      />
+      {/* Buscador (solo en producto/tienda) */}
+      {vista !== "proveedor" && (
+        <input
+          value={buscar}
+          onChange={e => setBuscar(e.target.value)}
+          placeholder={vista === "producto" ? "Buscar producto por nombre o código..." : "Buscar tienda por nombre o código..."}
+          style={{ width: "100%", boxSizing: "border-box", background: theme.card, border: `1.5px solid ${theme.border}`, borderRadius: "10px", color: theme.text, fontSize: "14px", padding: "11px 14px", outline: "none", marginBottom: "14px" }}
+        />
+      )}
 
       {loading ? (
         <p style={{ textAlign: "center", color: theme.muted, padding: "30px" }}>Calculando impactos...</p>
@@ -188,7 +221,7 @@ export default function ImpactosPage() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : vista === "tienda" ? (
         <div style={{ display: "grid", gap: "8px", gridTemplateColumns: "minmax(0, 1fr)" }}>
           {tiendaFiltrada.length === 0 ? (
             <p style={{ textAlign: "center", color: theme.muted, padding: "30px" }}>No hay ventas en este período.</p>
@@ -206,6 +239,53 @@ export default function ImpactosPage() {
               </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div>
+          <p style={{ fontSize: "13px", color: theme.muted, margin: "0 0 10px" }}>
+            Reporte para cada proveedor (grupo): cuántas tiendas impactaron sus productos, cuáles son y qué productos llevó cada una.
+          </p>
+          <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "6px" }}>Elige el proveedor (grupo)</label>
+          <select
+            value={grupoSel}
+            onChange={e => setGrupoSel(e.target.value)}
+            style={{ width: "100%", boxSizing: "border-box", background: theme.card, border: `1.5px solid ${theme.border}`, borderRadius: "10px", color: theme.text, fontSize: "14px", padding: "11px 14px", outline: "none", marginBottom: "16px" }}
+          >
+            {Object.keys(gruposData).length === 0 && <option value="">Sin datos en este período</option>}
+            {Object.keys(gruposData).sort().map(g => (
+              <option key={g} value={g}>Grupo {g} — {gruposData[g].clientes} tiendas, {gruposData[g].productos} productos</option>
+            ))}
+          </select>
+
+          {gruposData[grupoSel] ? (
+            <>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "18px" }}>
+                {tarjeta(gruposData[grupoSel].clientes.toLocaleString("es-CO"), "Tiendas impactadas")}
+                {tarjeta(gruposData[grupoSel].productos.toLocaleString("es-CO"), "Productos vendidos")}
+                {tarjeta(gruposData[grupoSel].impactos.toLocaleString("es-CO"), "Impactos totales")}
+              </div>
+
+              <p style={{ fontSize: "13px", fontWeight: 700, color: theme.text, margin: "0 0 10px" }}>
+                Tiendas impactadas y qué productos llevaron
+              </p>
+              <div style={{ display: "grid", gap: "8px", gridTemplateColumns: "minmax(0, 1fr)" }}>
+                {gruposData[grupoSel].detalle.map((c, i) => (
+                  <div key={c.id} style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "10px", padding: "12px 14px" }}>
+                    <p style={{ fontSize: "14px", fontWeight: 600, color: theme.text, margin: "0 0 6px", wordBreak: "break-word" }}>
+                      <span style={{ color: "#D72638", fontWeight: 800 }}>{i + 1}.</span> {c.nombre} <span style={{ fontSize: "12px", color: theme.muted, fontWeight: 400 }}>({c.codigo})</span>
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {c.productos.map(pr => (
+                        <span key={pr} style={{ fontSize: "12px", background: theme.cardAlt, color: theme.text, borderRadius: "6px", padding: "3px 8px", border: `1px solid ${theme.border}` }}>{pr}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p style={{ textAlign: "center", color: theme.muted, padding: "30px" }}>No hay ventas en este período.</p>
+          )}
         </div>
       )}
     </div>
