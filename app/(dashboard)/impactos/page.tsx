@@ -44,6 +44,27 @@ export default function ImpactosPage() {
   const [totalImpactos, setTotalImpactos] = useState(0)
   const [gruposData, setGruposData] = useState<Record<string, DatosGrupo>>({})
   const [grupoSel, setGrupoSel] = useState("")
+  const [nombresGrupos, setNombresGrupos] = useState<Record<string, string>>({})
+
+  useEffect(() => { cargarNombresGrupos() }, [])
+
+  async function cargarNombresGrupos() {
+    const { data } = await supabase.from("grupos").select("codigo, nombre")
+    const m: Record<string, string> = {}
+    for (const g of data || []) m[(g.codigo || "").toString().trim()] = g.nombre
+    setNombresGrupos(m)
+  }
+
+  function nombreGrupo(codigo: string): string {
+    const c = (codigo || "").toString().trim()
+    if (!c || c === "Sin grupo") return "Sin grupo"
+    if (nombresGrupos[c]) return nombresGrupos[c]
+    const con3 = c.padStart(3, "0")
+    if (nombresGrupos[con3]) return nombresGrupos[con3]
+    const sinCeros = c.replace(/^0+/, "")
+    if (nombresGrupos[sinCeros]) return nombresGrupos[sinCeros]
+    return `Grupo ${c}`
+  }
 
   useEffect(() => { cargar() }, [desde, hasta])
 
@@ -245,7 +266,7 @@ export default function ImpactosPage() {
         <table><thead><tr><th>Vendedor</th><th>Costo</th><th>Venta sin IVA</th><th>Contribución</th><th>Rentab.</th><th>Impactos</th></tr></thead><tbody>${filasV}${filaTot}</tbody></table>
         <h2 style="font-size:14px;margin:18px 0 4px">Tiendas impactadas y sus productos</h2>
         <table><thead><tr><th>#</th><th>Código</th><th>Tienda</th><th>Productos que llevó</th></tr></thead><tbody>${filasC}</tbody></table>`
-      imprimirHTML(`Impactos del proveedor · Grupo ${esc(grupoSel)}`, `<p><b>${g.clientes}</b> tiendas impactadas · <b>${g.productos}</b> productos vendidos · <b>${g.impactos}</b> impactos</p>` + cuerpo)
+      imprimirHTML(`Impactos del proveedor · ${esc(nombreGrupo(grupoSel))}`, `<p><b>${g.clientes}</b> tiendas impactadas · <b>${g.productos}</b> productos vendidos · <b>${g.impactos}</b> impactos</p>` + cuerpo)
       return
     }
     if (!filas) { alert("No hay datos para exportar en este período."); return }
@@ -375,13 +396,14 @@ export default function ImpactosPage() {
             style={{ width: "100%", boxSizing: "border-box", background: theme.card, border: `1.5px solid ${theme.border}`, borderRadius: "10px", color: theme.text, fontSize: "14px", padding: "11px 14px", outline: "none", marginBottom: "16px" }}
           >
             {Object.keys(gruposData).length === 0 && <option value="">Sin datos en este período</option>}
-            {Object.keys(gruposData).sort().map(g => (
-              <option key={g} value={g}>Grupo {g} — {gruposData[g].clientes} tiendas, {gruposData[g].productos} productos</option>
+            {Object.keys(gruposData).sort((a, b) => nombreGrupo(a).localeCompare(nombreGrupo(b))).map(g => (
+              <option key={g} value={g}>{nombreGrupo(g)} — {gruposData[g].clientes} tiendas, {gruposData[g].productos} productos</option>
             ))}
           </select>
 
           {gruposData[grupoSel] ? (
             <>
+              <p style={{ fontSize: "17px", fontWeight: 800, color: "#D72638", margin: "0 0 12px" }}>{nombreGrupo(grupoSel)} <span style={{ fontSize: "12px", color: theme.muted, fontWeight: 400 }}>(código {grupoSel})</span></p>
               <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "18px" }}>
                 {tarjeta(gruposData[grupoSel].clientes.toLocaleString("es-CO"), "Tiendas impactadas")}
                 {tarjeta(gruposData[grupoSel].productos.toLocaleString("es-CO"), "Productos vendidos")}
