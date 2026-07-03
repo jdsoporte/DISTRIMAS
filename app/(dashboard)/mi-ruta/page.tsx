@@ -39,6 +39,12 @@ export default function MiRutaPage() {
   const [otroTexto, setOtroTexto] = useState("")
   const [guardandoUbic, setGuardandoUbic] = useState<string | null>(null)
   const [buscar, setBuscar] = useState("")
+  const [config, setConfig] = useState<{ whatsapp_numero?: string; nombre_empresa?: string } | null>(null)
+  const [enviandoResumen, setEnviandoResumen] = useState(false)
+
+  useEffect(() => {
+    supabase.from("configuraciones").select("whatsapp_numero,nombre_empresa").limit(1).maybeSingle().then(r => setConfig(r.data))
+  }, [])
 
   useEffect(() => { cargar() }, [])
 
@@ -245,6 +251,56 @@ export default function MiRutaPage() {
     window.open(url, "_blank")
   }
 
+  async function enviarResumenRuta() {
+    const user = session
+    if (!user?.id) { alert("No se pudo identificar tu sesión. Vuelve a iniciar sesión."); return }
+    if (!config?.whatsapp_numero) { alert("No hay un número de WhatsApp configurado. Pídele al administrador que lo configure."); return }
+
+    setEnviandoResumen(true)
+    const fecha = hoyCol()
+    const ini = fecha + "T00:00:00-05:00"
+    const fin = fecha + "T23:59:59-05:00"
+
+    // Solo los pedidos de HOY, confirmados o entregados
+    const { data: peds, error: err } = await supabase.from("pedidos")
+      .select("cliente_id, total")
+      .eq("usuario_id", user.id)
+      .in("estado", ["confirmado", "entregado"])
+      .gte("created_at", ini)
+      .lte("created_at", fin)
+
+    setEnviandoResumen(false)
+    if (err) { alert("No se pudo calcular el resumen: " + err.message); return }
+
+    const lista = peds || []
+    const totalPedidos = lista.length
+    const tiendas = new Set(lista.map(p => p.cliente_id)).size
+    const valorTotal = lista.reduce((a, p) => a + (p.total || 0), 0)
+
+    const fechaTexto = new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "2-digit", month: "long", year: "numeric" })
+
+    const msg = [
+      `🏁 *FIN DE RUTA - ${config.nombre_empresa || ""}*`,
+      ``,
+      `👤 *Vendedor:* ${user.nombre || ""}`,
+      `🚚 *Ruta:* ${rutaNombre || "Sin ruta"}`,
+      `📅 *Fecha:* ${fechaTexto}`,
+      ``,
+      `📦 *Total de pedidos:* ${totalPedidos}`,
+      `🏪 *Tiendas que compraron:* ${tiendas}`,
+      `💰 *Valor total del día:* $${valorTotal.toLocaleString("es-CO")}`,
+    ].join("\n").trim()
+
+    const numero = (config.whatsapp_numero || "").replace(/\D/g, "")
+    const texto = encodeURIComponent(msg)
+    const esMovil = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    if (esMovil) {
+      window.location.href = `whatsapp://send?phone=${numero}&text=${texto}`
+    } else {
+      window.open(`https://wa.me/${numero}?text=${texto}`, "_blank")
+    }
+  }
+
   async function cerrarRuta() {
     const sinMarcar = clientes.filter(c => estadoDe(c.id) === "sin_marcar")
     const txt = sinMarcar.length > 0
@@ -424,9 +480,16 @@ export default function MiRutaPage() {
             })}
           </div>
 
+          {/* Fin de ruta: enviar resumen del día por WhatsApp */}
+          {clientes.length > 0 && (
+            <button onClick={enviarResumenRuta} disabled={enviandoResumen} style={{ marginTop: "16px", width: "100%", padding: "13px", background: "rgba(37,211,102,0.15)", color: "#1da851", fontWeight: 700, fontSize: "14px", borderRadius: "10px", border: "none", cursor: "pointer", opacity: enviandoResumen ? 0.6 : 1 }}>
+              {enviandoResumen ? "Calculando..." : "Fin de ruta - Enviar resumen por WhatsApp"}
+            </button>
+          )}
+
           {/* Cerrar ruta */}
           {!cerrada && clientes.length > 0 && (
-            <button onClick={cerrarRuta} style={{ marginTop: "16px", width: "100%", padding: "13px", background: "#0f1f3d", color: "white", fontWeight: 700, fontSize: "14px", borderRadius: "10px", border: "none", cursor: "pointer" }}>
+            <button onClick={cerrarRuta} style={{ marginTop: "10px", width: "100%", padding: "13px", background: "#0f1f3d", color: "white", fontWeight: 700, fontSize: "14px", borderRadius: "10px", border: "none", cursor: "pointer" }}>
               Cerrar ruta del día
             </button>
           )}
