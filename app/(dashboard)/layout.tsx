@@ -16,6 +16,7 @@ const MENUS_ADMIN = [
   { section: "Gestión" },
   { id: "clientes", label: "Clientes", href: "/clientes" },
   { id: "inventario", label: "Inventario", href: "/inventario" },
+  { id: "grupos", label: "Grupos / Proveedores", href: "/grupos" },
   { id: "rutas", label: "Rutas", href: "/rutas" },
   { id: "programacion", label: "Programación", href: "/programacion" },
   { section: "Administración" },
@@ -42,6 +43,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/clientes": "Clientes", "/inventario": "Inventario", "/rutas": "Rutas", "/programacion": "Programación", "/festivos": "Festivos", "/mi-ruta": "Mi ruta de hoy",
   "/usuarios": "Usuarios", "/perfiles": "Perfiles y permisos", "/estadisticas": "Estadísticas",
   "/impactos": "Impactos por producto y tienda",
+  "/grupos": "Grupos / Proveedores",
   "/configuraciones": "Configuraciones",
 }
 
