@@ -502,7 +502,7 @@ export default function NuevoPedidoPage() {
               {productosFiltrados.slice(0, 8).map(p => (
                 <div key={p.id} onClick={() => agregarProducto(p)} style={{ padding: "11px 16px", cursor: "pointer", borderBottom: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text }}>{p.nombre}</p>
+                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text }}>{p.nombre}{p.oferta && <span style={{ marginLeft: "8px", padding: "2px 7px", borderRadius: "5px", fontSize: "10px", fontWeight: 800, background: "#D72638", color: "white" }}>OFERTA</span>}</p>
                     <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{p.codigo} · Stock: {p.stock} {p.unidad}</p>
                   </div>
                   <span style={{ fontWeight: 700, fontSize: "15px", color: "#D72638", flexShrink: 0 }}>${p.precio.toLocaleString("es-CO")}</span>
@@ -521,7 +521,7 @@ export default function NuevoPedidoPage() {
               <div key={item.producto.id} style={{ background: theme.cardAlt, borderRadius: "10px", border: `1px solid ${theme.border}`, padding: "12px 14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, wordBreak: "break-word" }}>{item.producto.nombre}</p>
+                    <p style={{ fontWeight: 600, fontSize: "14px", margin: "0 0 2px", color: theme.text, wordBreak: "break-word" }}>{item.producto.nombre}{item.producto.oferta && <span style={{ marginLeft: "8px", padding: "2px 7px", borderRadius: "5px", fontSize: "10px", fontWeight: 800, background: "#D72638", color: "white" }}>OFERTA</span>}</p>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <p style={{ color: theme.muted, fontSize: "12px", margin: 0 }}>{item.producto.codigo} · {item.producto.unidad}</p>
                       {/* Stock disponible siempre visible */}
