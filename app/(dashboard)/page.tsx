@@ -56,6 +56,7 @@ export default function DashboardPage() {
   const [topTiendas, setTopTiendas]       = useState<(TopItem & { municipio: string })[]>([])
   const [diasData, setDiasData]           = useState<DiaItem[]>([])
   const [recientes, setRecientes]         = useState<any[]>([])
+  const [ofertas, setOfertas]             = useState<any[]>([])
   const [loading, setLoading]             = useState(true)
   const [alertaStock, setAlertaStock]     = useState<{ agotados: any[]; bajos: any[] }>({ agotados: [], bajos: [] })
   const [alertaCerrada, setAlertaCerrada] = useState(false)
@@ -98,6 +99,7 @@ export default function DashboardPage() {
       { data: bajo },
       { data: pedidos30 },
       { data: recientesRaw },
+      { data: ofertasRaw },
     ] = await Promise.all([
       qHoy,
       qAyer,
@@ -109,7 +111,10 @@ export default function DashboardPage() {
       supabase.from("productos").select("id,nombre,stock,stock_minimo").eq("activo", true),
       q30,
       qRec,
+      supabase.from("productos").select("id,codigo,nombre,precio").eq("activo", true).eq("oferta", true).order("nombre"),
     ])
+
+    setOfertas(ofertasRaw || [])
 
     const todosProductos = bajo || []
     const agotados = todosProductos.filter((p: any) => p.stock <= 0)
@@ -283,6 +288,27 @@ export default function DashboardPage() {
 
       {/* Ventas del día (admin y vendedor) */}
       <HistorialDia />
+
+      {/* Productos en oferta (visible para el vendedor) */}
+      {!isAdmin && ofertas.length > 0 && (
+        <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <span style={{ padding: "2px 8px", borderRadius: "5px", fontSize: "11px", fontWeight: 800, background: "#D72638", color: "white" }}>OFERTA</span>
+            <p style={{ fontSize: "14px", fontWeight: "bold", color: theme.text, margin: 0 }}>Productos en oferta ({ofertas.length})</p>
+          </div>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {ofertas.map(o => (
+              <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", padding: "8px 10px", background: theme.cardAlt, borderRadius: "8px" }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: theme.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.nombre}</p>
+                  <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>Código {o.codigo}</p>
+                </div>
+                <span style={{ fontSize: "14px", fontWeight: 700, color: "#D72638", flexShrink: 0 }}>${(o.precio || 0).toLocaleString("es-CO")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── TARJETAS ── */}
       <div className="cards-grid">
