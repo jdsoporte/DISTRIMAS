@@ -47,7 +47,7 @@ export default function PedidosPage() {
 
     let q = supabase
       .from("pedidos")
-      .select("*, cliente:clientes(*), usuario:usuarios(nombre), items:pedido_items(*, producto:productos(codigo,nombre,unidad))")
+      .select("*, cliente:clientes(*, ruta:rutas(nombre)), usuario:usuarios(nombre), items:pedido_items(*, producto:productos(codigo,nombre,unidad))")
       .gte("created_at", ini)
       .lte("created_at", fin)
       .order("created_at", { ascending: false })
@@ -64,6 +64,8 @@ export default function PedidosPage() {
     }
     const cliente: any = Array.isArray(pedido.cliente) ? pedido.cliente[0] : pedido.cliente
     const vendedor: any = Array.isArray(pedido.usuario) ? pedido.usuario[0] : pedido.usuario
+    const rutaCli: any = Array.isArray(cliente?.ruta) ? cliente.ruta[0] : cliente?.ruta
+    const nombreRuta = rutaCli?.nombre || ""
     const items: any[] = pedido.items || []
     const ahora = new Date()
     const fecha = ahora.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/Bogota" })
@@ -75,6 +77,7 @@ export default function PedidosPage() {
     const msg = [
       `🏪 *PEDIDO - ${config.nombre_empresa || ""}*`,
       ``,
+      ...(nombreRuta ? [`🚚 *RUTA: ${nombreRuta}*`] : []),
       `🔢 *CÓDIGO TIENDA: ${cliente?.codigo || ""}*`,
       `📋 *Cliente:* ${cliente?.nombre || ""}`,
       ...(cliente?.razon_social ? [`🏬 *Razón social:* ${cliente.razon_social}`] : []),
