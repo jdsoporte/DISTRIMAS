@@ -20,8 +20,13 @@ export default function GruposPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from("grupos").select("codigo, nombre").order("nombre")
-    setGrupos(data || [])
+    const { data } = await supabase.from("grupos").select("codigo, nombre")
+    const lista = (data || []).slice().sort((a, b) => {
+      const na = parseInt(a.codigo, 10), nb = parseInt(b.codigo, 10)
+      if (isNaN(na) || isNaN(nb)) return (a.codigo || "").localeCompare(b.codigo || "")
+      return na - nb
+    })
+    setGrupos(lista)
     setLoading(false)
   }
 
