@@ -84,6 +84,7 @@ export interface Producto {
   grupo: string
   iva: number
   costo?: number
+  oferta?: boolean
   activo: boolean
 }
 export interface PedidoItem {
