@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme-context"
 import { getSession } from "@/lib/auth"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, costo: 0, activo: true }
+const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, costo: 0, oferta: false, activo: true }
 
 interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number; avisos: string[] }
 
@@ -218,6 +218,11 @@ export default function InventarioPage() {
 
   async function toggleActivo(p: Producto) {
     await supabase.from("productos").update({ activo: !p.activo }).eq("id", p.id)
+  }
+
+  async function toggleOferta(p: Producto) {
+    await supabase.from("productos").update({ oferta: !p.oferta }).eq("id", p.id)
+    load()
   }
 
   function seleccionarArchivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -577,7 +582,7 @@ export default function InventarioPage() {
                 return (
                   <tr key={p.id} style={{ borderBottom: `1px solid ${theme.border}`, background: bajo ? "rgba(245,158,11,0.04)" : "transparent" }}>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{p.codigo}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 500, color: theme.text }}>{p.nombre}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 500, color: theme.text }}>{p.nombre}{p.oferta && <span style={{ marginLeft: "8px", padding: "2px 7px", borderRadius: "5px", fontSize: "10px", fontWeight: 800, background: "#D72638", color: "white", verticalAlign: "middle" }}>OFERTA</span>}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{p.grupo}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{p.unidad}</td>
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 600, color: theme.text }}>${p.precio.toLocaleString("es-CO")}</td>
@@ -609,6 +614,9 @@ export default function InventarioPage() {
                     <td style={{ padding: "12px 16px" }}>
                       <div className="acciones-wrap">
                         <button onClick={() => abrir(p)} style={{ padding: "6px 12px", background: theme.cardAlt, color: theme.text, fontSize: "12px", borderRadius: "6px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Editar</button>
+                        <button onClick={() => toggleOferta(p)} style={{ padding: "6px 12px", background: p.oferta ? "rgba(215,38,56,0.12)" : theme.cardAlt, color: p.oferta ? "#D72638" : theme.muted, fontSize: "12px", fontWeight: 600, borderRadius: "6px", border: p.oferta ? "none" : `1px solid ${theme.border}`, cursor: "pointer" }}>
+                          {p.oferta ? "Quitar oferta" : "Marcar oferta"}
+                        </button>
                         <button onClick={() => toggleActivo(p)} style={{ padding: "6px 12px", background: p.activo ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.12)", color: p.activo ? "#f59e0b" : "#22c55e", fontSize: "12px", borderRadius: "6px", border: "none", cursor: "pointer" }}>
                           {p.activo ? "Desactivar" : "Activar"}
                         </button>
@@ -678,6 +686,9 @@ export default function InventarioPage() {
               <div><label style={lbl}>Stock mínimo</label><input style={inp} type="number" value={form.stock_minimo} onChange={e => f("stock_minimo", e.target.value)} min={0} /></div>
               <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", cursor: "pointer", color: theme.text }}>
                 <input type="checkbox" checked={form.activo} onChange={e => f("activo", e.target.checked)} /> Activo
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", cursor: "pointer", color: theme.text }}>
+                <input type="checkbox" checked={!!form.oferta} onChange={e => f("oferta", e.target.checked)} /> En oferta
               </label>
             </div>
             <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
