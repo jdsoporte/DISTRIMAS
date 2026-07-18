@@ -41,7 +41,7 @@ export async function descargarParaOffline(userId: string): Promise<boolean> {
     if (asig?.ruta_id) {
       clientes = await traerTodo(
         "clientes",
-        "id, codigo, nombre, razon_social, nit, municipio, direccion, telefono, ruta_id, latitud, longitud",
+        "id, codigo, nombre, razon_social, nit, municipio, direccion, telefono, ruta_id, tarifa, latitud, longitud",
         (q) => q.eq("ruta_id", asig.ruta_id).order("nombre")
       )
     }
@@ -49,7 +49,7 @@ export async function descargarParaOffline(userId: string): Promise<boolean> {
     // Productos activos (con precio e IVA)
     const productos = await traerTodo(
       "productos",
-      "id, codigo, nombre, unidad, precio, stock, iva, grupo, activo",
+      "id, codigo, nombre, unidad, precio, precio_t1, precio_t2, precio_t3, oferta, stock, iva, grupo, activo",
       (q) => q.eq("activo", true).order("nombre")
     )
 
