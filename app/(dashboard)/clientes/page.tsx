@@ -5,7 +5,7 @@ import { Cliente } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Cliente> = { codigo: "", nit: "", nombre: "", razon_social: "", municipio: "", barrio: "", direccion: "", telefono: "", activo: true }
+const EMPTY: Partial<Cliente> = { codigo: "", nit: "", nombre: "", razon_social: "", municipio: "", barrio: "", direccion: "", telefono: "", tarifa: 1, activo: true }
 
 export default function ClientesPage() {
   const theme = useTheme()
@@ -82,6 +82,8 @@ export default function ClientesPage() {
       }
       return ""
     }
+    // Si el archivo NO trae columna TARIFA, no se toca la tarifa que ya tiene el cliente
+    const traeTarifa = rows.some(r => Object.keys(r).some(c => c.trim().toLowerCase() === "tarifa"))
     const registros = rows.map(r => {
       const tel = val(r, "TELEFON", "TELEFONO", "telefono")
       const cel = val(r, "CELULAR", "celular")
@@ -94,6 +96,7 @@ export default function ClientesPage() {
         barrio: val(r, "BARRIO", "barrio"),
         direccion: val(r, "DIRECCION", "direccion"),
         telefono: [tel, cel].filter(Boolean).join(" / "),
+        ...(traeTarifa ? { tarifa: (() => { const t = parseInt(val(r, "TARIFA", "tarifa", "Tarifa")); return (t === 1 || t === 2 || t === 3) ? t : 1 })() } : {}),
         activo: true,
       }
     }).filter(r => (r.nombre || r.razon_social) && r.codigo)
@@ -107,7 +110,7 @@ export default function ClientesPage() {
   }
 
   function exportarExcel() {
-    const datos = clientes.map(c => ({ Codigo: c.codigo, NIT_CC: c.nit, Nombre: c.nombre, Razon_social: c.razon_social, Municipio: c.municipio, Barrio: c.barrio, Direccion: c.direccion, Telefono: c.telefono, Activo: c.activo ? "Sí" : "No" }))
+    const datos = clientes.map(c => ({ Codigo: c.codigo, NIT_CC: c.nit, Nombre: c.nombre, Razon_social: c.razon_social, Municipio: c.municipio, Barrio: c.barrio, Direccion: c.direccion, Telefono: c.telefono, Tarifa: c.tarifa ?? "", Activo: c.activo ? "Sí" : "No" }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Clientes")
@@ -115,9 +118,9 @@ export default function ClientesPage() {
   }
 
   function descargarPlantilla() {
-    const ejemplo = [{ Codigo: "8214", NIT_CC: "1007758571", Nombre: "ANA VERONICA LOPEZ DUQUE", Razon_social: "FANTASIAS VMAJO", Municipio: "MEDELLIN", Barrio: "EL HUECO", Direccion: "CR 46 # 49 67", Telefono: "3104167730" }]
+    const ejemplo = [{ CODIGO: "8214", NIT_CC: "1007758571", NOMBRE: "ANA VERONICA LOPEZ DUQUE", RAZON_SOCIAL: "FANTASIAS VMAJO", MUNICIPIO: "MEDELLIN", BARRIO: "EL HUECO", DIRECCION: "CR 46 # 49 67", TELEFONO: "3104167730", TARIFA: 1 }]
     const ws = XLSX.utils.json_to_sheet(ejemplo)
-    ws["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 32 }, { wch: 16 }]
+    ws["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 32 }, { wch: 16 }, { wch: 8 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Clientes")
     XLSX.writeFile(wb, "plantilla_clientes.xlsx")
@@ -174,7 +177,7 @@ export default function ClientesPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "NIT/CC", "Nombre", "Razón social", "Municipio", "Barrio", "Teléfono", "Estado", "Acciones"].map(h => (
+                {["Código", "NIT/CC", "Nombre", "Razón social", "Municipio", "Barrio", "Teléfono", "Tarifa", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -193,6 +196,7 @@ export default function ClientesPage() {
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.municipio}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.barrio}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.telefono}</td>
+                  <td style={{ padding: "12px 16px", fontSize: "13px" }}>{c.tarifa ? <span style={{ padding: "3px 9px", borderRadius: "6px", fontSize: "12px", fontWeight: 700, background: "rgba(215,38,56,0.12)", color: "#D72638" }}>T{c.tarifa}</span> : <span style={{ fontSize: "12px", color: "#d97706", fontWeight: 600 }}>Sin asignar</span>}</td>
                   <td style={{ padding: "12px 16px" }}>
                     <span style={{ padding: "3px 10px", borderRadius: "99px", fontSize: "12px", fontWeight: 600, background: c.activo ? "rgba(34,197,94,0.12)" : theme.cardAlt, color: c.activo ? "#22c55e" : theme.muted }}>
                       {c.activo ? "Activo" : "Inactivo"}
@@ -231,6 +235,15 @@ export default function ClientesPage() {
               </div>
               <div><label style={lbl}>Dirección</label><input style={inp} value={form.direccion} onChange={e => f("direccion", e.target.value)} placeholder="CR 46 # 49 67" /></div>
               <div><label style={lbl}>Teléfono</label><input style={inp} value={form.telefono} onChange={e => f("telefono", e.target.value)} placeholder="3104167730" /></div>
+              <div>
+                <label style={lbl}>Tarifa de precios</label>
+                <select style={inp} value={form.tarifa ?? ""} onChange={e => f("tarifa", e.target.value === "" ? null : Number(e.target.value))}>
+                  <option value="">Sin asignar (no podrá hacer pedidos)</option>
+                  <option value={1}>Tarifa 1</option>
+                  <option value={2}>Tarifa 2</option>
+                  <option value={3}>Tarifa 3</option>
+                </select>
+              </div>
               <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", cursor: "pointer", color: theme.text }}>
                 <input type="checkbox" checked={form.activo} onChange={e => f("activo", e.target.checked)} /> Activo
               </label>
