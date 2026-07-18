@@ -45,6 +45,7 @@ export interface Cliente {
   direccion: string
   telefono: string
   ruta_id: string | null
+  tarifa?: number | null
   activo: boolean
   created_at: string
   latitud?: number | null
@@ -85,6 +86,9 @@ export interface Producto {
   iva: number
   costo?: number
   oferta?: boolean
+  precio_t1?: number
+  precio_t2?: number
+  precio_t3?: number
   activo: boolean
 }
 export interface PedidoItem {
