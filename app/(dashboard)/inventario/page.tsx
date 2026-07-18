@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme-context"
 import { getSession } from "@/lib/auth"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, costo: 0, oferta: false, activo: true }
+const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, precio_t2: 0, precio_t3: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, costo: 0, oferta: false, activo: true }
 
 interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number; avisos: string[] }
 
@@ -82,7 +82,7 @@ export default function InventarioPage() {
     if (!form.nombre?.trim()) return setError("El nombre es requerido")
     if (!form.codigo?.trim()) return setError("El código es requerido")
     setSaving(true); setError("")
-    const payload = { ...form, precio: Number(form.precio), stock: Number(form.stock), stock_minimo: Number(form.stock_minimo), iva: Number(form.iva), costo: Number(form.costo) }
+    const payload = { ...form, precio: Number(form.precio), precio_t1: Number(form.precio), precio_t2: Number(form.precio_t2 || 0), precio_t3: Number(form.precio_t3 || 0), stock: Number(form.stock), stock_minimo: Number(form.stock_minimo), iva: Number(form.iva), costo: Number(form.costo) }
     const { error: err } = editando
       ? await supabase.from("productos").update(payload).eq("id", editando)
       : await supabase.from("productos").insert(payload)
@@ -264,9 +264,14 @@ export default function InventarioPage() {
     }
 
     const filas = rows.map((r, idx) => {
-      const precioRaw = col(r, "precio", "Precio", "PRECIO", "pv1_mn", "Pv1_mn", "PV1_MN")
+      // Tarifa 1 = PVP_MN · Tarifa 2 = PV1_MN · Tarifa 3 = PV2_MN
+      const precioRaw = col(r, "pvp_mn", "Pvp_mn", "PVP_MN", "precio", "Precio", "PRECIO")
+      const t2Raw     = col(r, "pv1_mn", "Pv1_mn", "PV1_MN")
+      const t3Raw     = col(r, "pv2_mn", "Pv2_mn", "PV2_MN")
       const stockRaw  = col(r, "stock", "Stock", "STOCK", "can_mn", "Can_mn", "CAN_MN")
       return {
+        precio_t2: Number(t2Raw ?? 0),
+        precio_t3: Number(t3Raw ?? 0),
         excelFila:    idx + 2,
         codigo:       String(col(r, "codigo", "Codigo", "CODIGO") ?? "").trim(),
         nombre:       String(col(r, "nombre", "Nombre", "NOMBRE", "articulo", "Articulo", "ARTICULO") ?? "").trim(),
@@ -319,16 +324,20 @@ export default function InventarioPage() {
         const { data: existe } = await supabase
           .from("productos").select("id").eq("codigo", fila.codigo).maybeSingle()
 
+        const t2 = isNaN(fila.precio_t2) ? 0 : fila.precio_t2
+        const t3 = isNaN(fila.precio_t3) ? 0 : fila.precio_t3
+
         if (existe) {
+          // Solo se actualiza lo que trae el archivo. IVA, costo y oferta se conservan.
           const { error: err } = await supabase.from("productos")
-            .update({ stock, precio, grupo: fila.grupo, updated_at: new Date().toISOString() })
+            .update({ stock, precio, precio_t1: precio, precio_t2: t2, precio_t3: t3, grupo: fila.grupo, updated_at: new Date().toISOString() })
             .eq("codigo", fila.codigo)
           if (err) errores++; else actualizados++
         } else {
           const { error: err } = await supabase.from("productos").insert({
             codigo: fila.codigo, nombre: fila.nombre || fila.codigo,
             descripcion: fila.descripcion, unidad: fila.unidad || "Und",
-            precio, stock,
+            precio, precio_t1: precio, precio_t2: t2, precio_t3: t3, stock,
             stock_minimo: isNaN(fila.stock_minimo) ? 10 : (fila.stock_minimo || 10), grupo: fila.grupo, activo: true,
           })
           if (err) errores++; else nuevos++
@@ -567,7 +576,7 @@ export default function InventarioPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "Nombre", "Grupo", "Unidad", "Precio", "IVA", "Sin IVA", "Costo", "Margen", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
+                {["Código", "Nombre", "Grupo", "Unidad", "Tarifa 1", "Tarifa 2", "Tarifa 3", "IVA", "Sin IVA", "Costo", "Margen", "Stock", "Mín.", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -585,7 +594,9 @@ export default function InventarioPage() {
                     <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 500, color: theme.text }}>{p.nombre}{p.oferta && <span style={{ marginLeft: "8px", padding: "2px 7px", borderRadius: "5px", fontSize: "10px", fontWeight: 800, background: "#D72638", color: "white", verticalAlign: "middle" }}>OFERTA</span>}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{p.grupo}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{p.unidad}</td>
-                    <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 600, color: theme.text }}>${p.precio.toLocaleString("es-CO")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "14px", fontWeight: 600, color: theme.text }}>${(p.precio_t1 || p.precio || 0).toLocaleString("es-CO")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "14px", color: theme.text }}>${(p.precio_t2 || 0).toLocaleString("es-CO")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: "14px", color: theme.text }}>${(p.precio_t3 || 0).toLocaleString("es-CO")}</td>
                     <td style={{ padding: "12px 16px", fontSize: "13px" }}>
                       <span style={{ padding: "2px 8px", borderRadius: "99px", fontSize: "12px", fontWeight: 600, background: (p.iva || 0) > 0 ? "rgba(215,38,56,0.12)" : theme.cardAlt, color: (p.iva || 0) > 0 ? "#D72638" : theme.muted }}>{p.iva || 0}%</span>
                     </td>
@@ -648,7 +659,9 @@ export default function InventarioPage() {
                     {["Und", "Cja", "Blt", "Kg", "Lt", "Par"].map(u => <option key={u}>{u}</option>)}
                   </select>
                 </div>
-                <div><label style={lbl}>Precio (con IVA)</label><input style={inp} type="number" value={form.precio} onChange={e => f("precio", e.target.value)} min={0} /></div>
+                <div><label style={lbl}>Tarifa 1 (con IVA)</label><input style={inp} type="number" value={form.precio} onChange={e => f("precio", e.target.value)} min={0} /></div>
+                <div><label style={lbl}>Tarifa 2 (con IVA)</label><input style={inp} type="number" value={form.precio_t2 ?? 0} onChange={e => f("precio_t2", e.target.value)} min={0} /></div>
+                <div><label style={lbl}>Tarifa 3 (con IVA)</label><input style={inp} type="number" value={form.precio_t3 ?? 0} onChange={e => f("precio_t3", e.target.value)} min={0} /></div>
                 <div><label style={lbl}>Stock actual</label><input style={inp} type="number" value={form.stock} onChange={e => f("stock", e.target.value)} min={0} /></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
