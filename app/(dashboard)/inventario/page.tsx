@@ -361,9 +361,9 @@ export default function InventarioPage() {
   }
 
   function descargarPlantilla() {
-    const ejemplo = [{ CODIGO: "0043", ARTICULO: "BIG BOM BABY CARITA FELIZ X48", GRU: "001", CAN_MN: 105, PV1_MN: 7600 }]
+    const ejemplo = [{ CODIGO: "0043", ARTICULO: "BIG BOM BABY CARITA FELIZ X48", GRU: "001", CAN_MN: 105, PVP_MN: 8500, PV1_MN: 7600, PV2_MN: 9100 }]
     const ws = XLSX.utils.json_to_sheet(ejemplo)
-    ws["!cols"] = [{ wch: 10 }, { wch: 36 }, { wch: 8 }, { wch: 10 }, { wch: 12 }]
+    ws["!cols"] = [{ wch: 10 }, { wch: 36 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Inventario")
     XLSX.writeFile(wb, "plantilla_inventario.xlsx")
