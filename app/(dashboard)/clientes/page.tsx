@@ -5,7 +5,7 @@ import { Cliente } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
 import * as XLSX from "xlsx"
 
-const EMPTY: Partial<Cliente> = { codigo: "", nit: "", nombre: "", razon_social: "", municipio: "", barrio: "", direccion: "", telefono: "", tarifa: 1, activo: true }
+const EMPTY: Partial<Cliente> = { codigo: "", nit: "", nombre: "", razon_social: "", municipio: "", barrio: "", direccion: "", telefono: "", vendedor: "", cupo_credito: null, nivel: null, visita: null, zona: "", nom_zona: "", tarifa: 1, activo: true }
 
 export default function ClientesPage() {
   const theme = useTheme()
@@ -44,7 +44,7 @@ export default function ClientesPage() {
   function abrir(c?: Cliente) {
     setError("")
     setEditando(c ? c.id : null)
-    setForm(c ? { codigo: c.codigo, nit: c.nit, nombre: c.nombre, razon_social: c.razon_social, municipio: c.municipio, barrio: c.barrio, direccion: c.direccion, telefono: c.telefono, activo: c.activo } : { ...EMPTY })
+    setForm(c ? { codigo: c.codigo, nit: c.nit, nombre: c.nombre, razon_social: c.razon_social, municipio: c.municipio, barrio: c.barrio, direccion: c.direccion, telefono: c.telefono, vendedor: c.vendedor ?? "", cupo_credito: c.cupo_credito ?? null, nivel: c.nivel ?? null, visita: c.visita ?? null, zona: c.zona ?? "", nom_zona: c.nom_zona ?? "", tarifa: c.tarifa, activo: c.activo } : { ...EMPTY })
     setModal(true)
   }
 
@@ -84,6 +84,7 @@ export default function ClientesPage() {
     }
     // Si el archivo NO trae columna TARIFA, no se toca la tarifa que ya tiene el cliente
     const traeTarifa = rows.some(r => Object.keys(r).some(c => c.trim().toLowerCase() === "tarifa"))
+    const num = (s: string) => { const n = parseFloat(s.replace(/,/g, "")); return isNaN(n) ? null : n }
     const registros = rows.map(r => {
       const tel = val(r, "TELEFON", "TELEFONO", "telefono")
       const cel = val(r, "CELULAR", "celular")
@@ -96,21 +97,47 @@ export default function ClientesPage() {
         barrio: val(r, "BARRIO", "barrio"),
         direccion: val(r, "DIRECCION", "direccion"),
         telefono: [tel, cel].filter(Boolean).join(" / "),
+        vendedor: val(r, "VEN", "VENDEDOR", "vendedor") || null,
+        cupo_credito: num(val(r, "CUPO_CRED", "CUPO_CREDITO", "cupo_credito")),
+        nivel: num(val(r, "NIV", "NIVEL", "nivel")),
+        visita: num(val(r, "VISITA", "visita")),
+        zona: val(r, "ZONA", "zona") || null,
+        nom_zona: val(r, "NOM_ZONA", "nom_zona") || null,
         ...(traeTarifa ? { tarifa: (() => { const t = parseInt(val(r, "TARIFA", "tarifa", "Tarifa")); return (t === 1 || t === 2 || t === 3) ? t : 1 })() } : {}),
         activo: true,
       }
     }).filter(r => (r.nombre || r.razon_social) && r.codigo)
     if (registros.length === 0) { setMsgImport("No se encontraron registros válidos."); setImportando(false); return }
     const { error: err } = await supabase.from("clientes").upsert(registros, { onConflict: "codigo" })
+    if (err) { setImportando(false); setMsgImport("Error: " + err.message); return }
+
+    // Inactivar (sin borrar) los clientes que ya NO vienen en este archivo,
+    // porque el archivo siempre trae la totalidad de clientes de la empresa.
+    const codigosArchivo = new Set(registros.map(r => r.codigo))
+    const TAM = 1000
+    let desde = 0
+    let existentes: { codigo: string; activo: boolean }[] = []
+    while (true) {
+      const { data } = await supabase.from("clientes").select("codigo,activo").range(desde, desde + TAM - 1)
+      if (!data || data.length === 0) break
+      existentes = existentes.concat(data)
+      if (data.length < TAM) break
+      desde += TAM
+    }
+    const faltantes = existentes.filter(c => c.activo && !codigosArchivo.has(c.codigo)).map(c => c.codigo)
+    for (let i = 0; i < faltantes.length; i += 200) {
+      const lote = faltantes.slice(i, i + 200)
+      await supabase.from("clientes").update({ activo: false }).in("codigo", lote)
+    }
+
     setImportando(false)
-    if (err) { setMsgImport("Error: " + err.message); return }
-    setMsgImport(`✓ ${registros.length} clientes importados`)
+    setMsgImport(`✓ ${registros.length} clientes actualizados${faltantes.length ? ` · ${faltantes.length} inactivados (ya no vienen en el archivo)` : ""}`)
     load()
     if (fileRef.current) fileRef.current.value = ""
   }
 
   function exportarExcel() {
-    const datos = clientes.map(c => ({ Codigo: c.codigo, NIT_CC: c.nit, Nombre: c.nombre, Razon_social: c.razon_social, Municipio: c.municipio, Barrio: c.barrio, Direccion: c.direccion, Telefono: c.telefono, Tarifa: c.tarifa ?? "", Activo: c.activo ? "Sí" : "No" }))
+    const datos = clientes.map(c => ({ Codigo: c.codigo, NIT_CC: c.nit, Nombre: c.nombre, Razon_social: c.razon_social, Municipio: c.municipio, Barrio: c.barrio, Direccion: c.direccion, Telefono: c.telefono, Vendedor: c.vendedor ?? "", Cupo_credito: c.cupo_credito ?? "", Nivel: c.nivel ?? "", Visita: c.visita ?? "", Zona: c.zona ?? "", Nom_zona: c.nom_zona ?? "", Tarifa: c.tarifa ?? "", Activo: c.activo ? "Sí" : "No" }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Clientes")
@@ -118,9 +145,9 @@ export default function ClientesPage() {
   }
 
   function descargarPlantilla() {
-    const ejemplo = [{ CODIGO: "8214", NIT_CC: "1007758571", NOMBRE: "ANA VERONICA LOPEZ DUQUE", RAZON_SOCIAL: "FANTASIAS VMAJO", MUNICIPIO: "MEDELLIN", BARRIO: "EL HUECO", DIRECCION: "CR 46 # 49 67", TELEFONO: "3104167730", TARIFA: 1 }]
+    const ejemplo = [{ CODIGO: "8214", NIT_CC: "1007758571", NOMBRE: "ANA VERONICA LOPEZ DUQUE", RAZON_SOCIAL: "FANTASIAS VMAJO", MUNICIPIO: "MEDELLIN", BARRIO: "EL HUECO", DIRECCION: "CR 46 # 49 67", TELEFONO: "3104167730", VEN: "04", CUPO_CRED: 500000, NIV: 1, VISITA: 0, ZONA: "09", NOM_ZONA: "MONITOS", TARIFA: 1 }]
     const ws = XLSX.utils.json_to_sheet(ejemplo)
-    ws["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 32 }, { wch: 16 }, { wch: 8 }]
+    ws["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 32 }, { wch: 16 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 8 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Clientes")
     XLSX.writeFile(wb, "plantilla_clientes.xlsx")
@@ -177,16 +204,16 @@ export default function ClientesPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {["Código", "NIT/CC", "Nombre", "Razón social", "Municipio", "Barrio", "Teléfono", "Tarifa", "Estado", "Acciones"].map(h => (
+                {["Código", "NIT/CC", "Nombre", "Razón social", "Municipio", "Barrio", "Teléfono", "Vendedor", "Zona", "Tarifa", "Estado", "Acciones"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: "11px", fontWeight: "bold", color: theme.muted, textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
+                <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay clientes</td></tr>
+                <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay clientes</td></tr>
               ) : filtrados.map(c => (
                 <tr key={c.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{c.codigo}</td>
@@ -196,6 +223,8 @@ export default function ClientesPage() {
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.municipio}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.barrio}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.telefono}</td>
+                  <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.vendedor}</td>
+                  <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted }}>{c.zona}{c.nom_zona ? ` - ${c.nom_zona}` : ""}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px" }}>{c.tarifa ? <span style={{ padding: "3px 9px", borderRadius: "6px", fontSize: "12px", fontWeight: 700, background: "rgba(215,38,56,0.12)", color: "#D72638" }}>T{c.tarifa}</span> : <span style={{ fontSize: "12px", color: "#d97706", fontWeight: 600 }}>Sin asignar</span>}</td>
                   <td style={{ padding: "12px 16px" }}>
                     <span style={{ padding: "3px 10px", borderRadius: "99px", fontSize: "12px", fontWeight: 600, background: c.activo ? "rgba(34,197,94,0.12)" : theme.cardAlt, color: c.activo ? "#22c55e" : theme.muted }}>
@@ -235,6 +264,15 @@ export default function ClientesPage() {
               </div>
               <div><label style={lbl}>Dirección</label><input style={inp} value={form.direccion} onChange={e => f("direccion", e.target.value)} placeholder="CR 46 # 49 67" /></div>
               <div><label style={lbl}>Teléfono</label><input style={inp} value={form.telefono} onChange={e => f("telefono", e.target.value)} placeholder="3104167730" /></div>
+              <div className="form-grid-2">
+                <div><label style={lbl}>Vendedor</label><input style={inp} value={form.vendedor ?? ""} onChange={e => f("vendedor", e.target.value)} placeholder="04" /></div>
+                <div><label style={lbl}>Zona</label><input style={inp} value={form.zona ?? ""} onChange={e => f("zona", e.target.value)} placeholder="09" /></div>
+              </div>
+              <div><label style={lbl}>Nombre de zona</label><input style={inp} value={form.nom_zona ?? ""} onChange={e => f("nom_zona", e.target.value)} placeholder="MONITOS" /></div>
+              <div className="form-grid-2">
+                <div><label style={lbl}>Cupo de crédito</label><input type="number" style={inp} value={form.cupo_credito ?? ""} onChange={e => f("cupo_credito", e.target.value === "" ? null : Number(e.target.value))} placeholder="0" /></div>
+                <div><label style={lbl}>Nivel</label><input type="number" style={inp} value={form.nivel ?? ""} onChange={e => f("nivel", e.target.value === "" ? null : Number(e.target.value))} placeholder="0" /></div>
+              </div>
               <div>
                 <label style={lbl}>Tarifa de precios</label>
                 <select style={inp} value={form.tarifa ?? ""} onChange={e => f("tarifa", e.target.value === "" ? null : Number(e.target.value))}>
