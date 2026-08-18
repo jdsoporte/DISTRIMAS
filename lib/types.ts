@@ -51,6 +51,12 @@ export interface Cliente {
   latitud?: number | null
   longitud?: number | null
   ubicacion_fecha?: string | null
+  vendedor?: string | null
+  cupo_credito?: number | null
+  nivel?: number | null
+  visita?: number | null
+  zona?: string | null
+  nom_zona?: string | null
 }
 export interface Ruta {
   id: string
