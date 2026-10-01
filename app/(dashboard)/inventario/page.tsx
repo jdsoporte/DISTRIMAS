@@ -329,8 +329,11 @@ export default function InventarioPage() {
 
         if (existe) {
           // Solo se actualiza lo que trae el archivo. IVA, costo y oferta se conservan.
+          // El nombre se actualiza si viene en el archivo (renombres hechos en el otro software).
+          const cambios: Record<string, unknown> = { stock, precio, precio_t1: precio, precio_t2: t2, precio_t3: t3, grupo: fila.grupo, updated_at: new Date().toISOString() }
+          if (fila.nombre) cambios.nombre = fila.nombre
           const { error: err } = await supabase.from("productos")
-            .update({ stock, precio, precio_t1: precio, precio_t2: t2, precio_t3: t3, grupo: fila.grupo, updated_at: new Date().toISOString() })
+            .update(cambios)
             .eq("codigo", fila.codigo)
           if (err) errores++; else actualizados++
         } else {
@@ -419,7 +422,7 @@ export default function InventarioPage() {
             <div style={{ width: "34px", height: "34px", borderRadius: "9px", background: "rgba(215,38,56,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", flexShrink: 0 }}>📥</div>
             <div>
               <p style={{ fontSize: "14px", fontWeight: 700, color: theme.text, margin: 0 }}>Importar inventario desde Excel</p>
-              <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>Solo actualiza stock y precio de existentes · Nunca borra productos</p>
+              <p style={{ fontSize: "11px", color: theme.muted, margin: 0 }}>Actualiza nombre, stock y precio de existentes · Nunca borra productos</p>
             </div>
           </div>
 
