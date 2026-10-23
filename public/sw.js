@@ -3,7 +3,7 @@
 // NO cachea las llamadas a Supabase: los datos siempre van a la red,
 // para no mostrar informacion vieja o falsa.
 
-const CACHE = "distrimas-v2"
+const CACHE = "distrimas-v3"
 const APP_SHELL = ["/", "/manifest.webmanifest"]
 
 self.addEventListener("install", (e) => {

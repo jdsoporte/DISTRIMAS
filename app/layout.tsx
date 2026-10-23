@@ -2,16 +2,14 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
 
-const LOGO = '/logo.png'
-
 export const metadata: Metadata = {
   title: 'Distrimas SC',
   description: 'Sistema de Gestión',
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: LOGO,
-    shortcut: LOGO,
-    apple: LOGO,
+    icon: '/icon-192.png',
+    shortcut: '/icon-192.png',
+    apple: '/apple-icon.png',
   },
   appleWebApp: {
     capable: true,
