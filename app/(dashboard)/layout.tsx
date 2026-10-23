@@ -51,14 +51,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<Usuario | null>(null)
-  const [darkMode, setDarkMode] = useState(true)
+  // Siempre inicia en modo claro; el modo oscuro dura solo mientras está abierta la app
+  const [darkMode, setDarkMode] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [fecha, setFecha] = useState("")
   const [tutorial, setTutorial] = useState(false)
 
   useEffect(() => {
-    const saved = localStorage.getItem("distrimas_dark")
-    if (saved !== null) setDarkMode(saved === "1")
+    localStorage.removeItem("distrimas_dark")
     const session = getSession()
     if (!session) { router.push("/login"); return }
     setUser(session)
@@ -70,9 +70,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [router])
 
   function toggleDark() {
-    const next = !darkMode
-    setDarkMode(next)
-    localStorage.setItem("distrimas_dark", next ? "1" : "0")
+    setDarkMode(!darkMode)
   }
 
   useEffect(() => { setSidebarOpen(false) }, [pathname])

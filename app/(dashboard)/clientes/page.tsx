@@ -7,6 +7,9 @@ import * as XLSX from "xlsx"
 
 const EMPTY: Partial<Cliente> = { codigo: "", nit: "", nombre: "", razon_social: "", municipio: "", barrio: "", direccion: "", telefono: "", vendedor: "", cupo_credito: null, nivel: null, visita: null, zona: "", nom_zona: "", tarifa: 1, activo: true }
 
+// Filas que se dibujan a la vez (dibujar miles de golpe pone lento el celular)
+const POR_PAGINA = 100
+
 export default function ClientesPage() {
   const theme = useTheme()
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -17,6 +20,7 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [buscar, setBuscar] = useState("")
+  const [visibles, setVisibles] = useState(POR_PAGINA)
   const [importando, setImportando] = useState(false)
   const [msgImport, setMsgImport] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
@@ -34,6 +38,8 @@ export default function ClientesPage() {
         .range(desde, desde + TAM - 1)
       if (error || !data || data.length === 0) break
       todos = todos.concat(data)
+      setClientes([...todos]) // mostramos lo que va llegando
+      setLoading(false)       // quitamos "Cargando" apenas llega el primer bloque
       if (data.length < TAM) break
       desde += TAM
     }
@@ -161,6 +167,8 @@ export default function ClientesPage() {
     c.municipio.toLowerCase().includes(buscar.toLowerCase())
   )
 
+  useEffect(() => { setVisibles(POR_PAGINA) }, [buscar])
+
   const f = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }))
   const inp = { background: theme.cardAlt, border: `1.5px solid ${theme.border}`, borderRadius: "8px", color: theme.text, fontSize: "14px", padding: "10px 12px", outline: "none", width: "100%", boxSizing: "border-box" as const }
   const lbl = { display: "block", fontSize: "11px", fontWeight: "bold" as const, color: theme.muted, textTransform: "uppercase" as const, letterSpacing: "0.7px", marginBottom: "6px" }
@@ -214,7 +222,7 @@ export default function ClientesPage() {
                 <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
                 <tr><td colSpan={11} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay clientes</td></tr>
-              ) : filtrados.map(c => (
+              ) : filtrados.slice(0, visibles).map(c => (
                 <tr key={c.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{c.codigo}</td>
                   <td style={{ padding: "12px 16px", fontSize: "13px", color: theme.muted, fontFamily: "monospace" }}>{c.nit}</td>
@@ -245,6 +253,12 @@ export default function ClientesPage() {
           </table>
         </div>
       </div>
+      {!loading && filtrados.length > visibles && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", marginTop: "12px" }}>
+          <p style={{ fontSize: "12px", color: theme.muted, margin: 0 }}>Mostrando {visibles} de {filtrados.length} clientes</p>
+          <button onClick={() => setVisibles(v => v + POR_PAGINA)} style={{ padding: "8px 18px", background: theme.cardAlt, color: theme.text, fontSize: "13px", fontWeight: 600, borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Mostrar más</button>
+        </div>
+      )}
 
       {modal && (
         <div className="modal-overlay">

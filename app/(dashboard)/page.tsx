@@ -41,16 +41,19 @@ interface Stats {
   pedidosAyer: number
   ventasMes: number
   tiendasActivas: number
-  stockBajo: number
+  agotados: number
   tiendasVisitadas: number
   miRanking: number
   promedioDiario: number
 }
 
+const sortTop = <T extends TopItem>(m: Record<string, T>) =>
+  Object.values(m).sort((a, b) => b.total - a.total).slice(0, 5)
+
 export default function DashboardPage() {
   const theme = useTheme()
   const [user, setUser]                   = useState<Usuario | null>(null)
-  const [stats, setStats]                 = useState<Stats>({ pedidosHoy: 0, pedidosAyer: 0, ventasMes: 0, tiendasActivas: 0, stockBajo: 0, tiendasVisitadas: 0, miRanking: 0, promedioDiario: 0 })
+  const [stats, setStats]                 = useState<Stats>({ pedidosHoy: 0, pedidosAyer: 0, ventasMes: 0, tiendasActivas: 0, agotados: 0, tiendasVisitadas: 0, miRanking: 0, promedioDiario: 0 })
   const [topVendedores, setTopVendedores] = useState<TopItem[]>([])
   const [topProductos, setTopProductos]   = useState<TopItem[]>([])
   const [topTiendas, setTopTiendas]       = useState<(TopItem & { municipio: string })[]>([])
@@ -58,8 +61,7 @@ export default function DashboardPage() {
   const [recientes, setRecientes]         = useState<any[]>([])
   const [ofertas, setOfertas]             = useState<any[]>([])
   const [loading, setLoading]             = useState(true)
-  const [alertaStock, setAlertaStock]     = useState<{ agotados: any[]; bajos: any[] }>({ agotados: [], bajos: [] })
-  const [alertaCerrada, setAlertaCerrada] = useState(false)
+  const [loadingTops, setLoadingTops]     = useState(true)
 
   useEffect(() => {
     const session = getSession()
@@ -91,12 +93,13 @@ export default function DashboardPage() {
       qRec  = qRec.eq("usuario_id", uid)
     }
 
+    // Primera tanda: solo datos livianos para pintar las tarjetas rápido
     const [
       { count: pedidosHoy },
       { count: pedidosAyer },
       { data: pedidosMes },
       { count: tiendas },
-      { data: bajo },
+      { count: agotados },
       { data: pedidos30 },
       { data: recientesRaw },
       { data: ofertasRaw },
@@ -104,29 +107,27 @@ export default function DashboardPage() {
       qHoy,
       qAyer,
       supabase.from("pedidos")
-        .select("total, usuario_id, usuario:usuarios(nombre), cliente:clientes(nombre, municipio), items:pedido_items(cantidad, precio_unitario, producto:productos(nombre))")
+        .select("total, usuario_id, cliente_id, usuario:usuarios(nombre)")
         .gte("created_at", inicioMes)
         .neq("estado", "cancelado"),
       supabase.from("clientes").select("id", { count: "exact", head: true }).eq("activo", true),
-      supabase.from("productos").select("id,nombre,stock,stock_minimo").eq("activo", true),
+      isAdmin
+        ? supabase.from("productos").select("id", { count: "exact", head: true }).eq("activo", true).lte("stock", 0)
+        : Promise.resolve({ count: 0 }),
       q30,
       qRec,
-      supabase.from("productos").select("id,codigo,nombre,precio").eq("activo", true).eq("oferta", true).order("nombre"),
+      isAdmin
+        ? Promise.resolve({ data: [] })
+        : supabase.from("productos").select("id,codigo,nombre,precio").eq("activo", true).eq("oferta", true).order("nombre"),
     ])
 
     setOfertas(ofertasRaw || [])
-
-    const todosProductos = bajo || []
-    const agotados = todosProductos.filter((p: any) => p.stock <= 0)
-    const bajos    = todosProductos.filter((p: any) => p.stock > 0 && p.stock < p.stock_minimo)
-    setAlertaStock({ agotados, bajos })
-    setAlertaCerrada(false)
 
     const allPedidosMes = pedidosMes || []
     const misPedidosMes = isAdmin ? allPedidosMes : allPedidosMes.filter((p: any) => p.usuario_id === uid)
 
     const ventasMes      = misPedidosMes.reduce((a: number, p: any) => a + (p.total || 0), 0)
-    const tiendasVisitadas = new Set(misPedidosMes.map((p: any) => (p.cliente as any)?.nombre).filter(Boolean)).size
+    const tiendasVisitadas = new Set(misPedidosMes.map((p: any) => p.cliente_id).filter(Boolean)).size
     const diaDelMes      = new Date().getDate()
     const promedioDiario = Math.round(ventasMes / Math.max(1, diaDelMes))
 
@@ -139,11 +140,53 @@ export default function DashboardPage() {
       vendMap[nombre].cantidad += 1
     })
 
-    // Top tiendas y productos filtrados por vendedor
+    const diaMap: Record<string, number> = {}
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
+      diaMap[d] = 0
+    }
+    ;(pedidos30 || []).forEach((p: any) => {
+      const d = new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
+      if (d in diaMap) diaMap[d]++
+    })
+
+    const sortedVend = sortTop(vendMap)
+    const miNombre   = session?.nombre || ""
+    const miRankingPos = sortedVend.findIndex(v => v.nombre === miNombre) + 1
+
+    setStats({
+      pedidosHoy: pedidosHoy || 0,
+      pedidosAyer: pedidosAyer || 0,
+      ventasMes,
+      tiendasActivas: tiendas || 0,
+      agotados: agotados || 0,
+      tiendasVisitadas,
+      miRanking: miRankingPos,
+      promedioDiario,
+    })
+    setTopVendedores(sortedVend)
+    setDiasData(Object.entries(diaMap).map(([dia, pedidos]) => ({ dia: dia.slice(5), pedidos })))
+    setRecientes(recientesRaw || [])
+    setLoading(false)
+
+    // Segunda tanda (en segundo plano): detalle de productos y tiendas del mes.
+    // El vendedor solo trae sus propios pedidos, no los de todo el equipo.
+    loadTops(inicioMes, isAdmin, uid)
+  }
+
+  async function loadTops(inicioMes: string, isAdmin: boolean, uid?: string) {
+    setLoadingTops(true)
+    let q = supabase.from("pedidos")
+      .select("total, cliente:clientes(nombre, municipio), items:pedido_items(cantidad, precio_unitario, producto:productos(nombre))")
+      .gte("created_at", inicioMes)
+      .neq("estado", "cancelado")
+    if (!isAdmin && uid) q = q.eq("usuario_id", uid)
+    const { data } = await q
+
     const tiendaMap: Record<string, TopItem & { municipio: string }> = {}
     const prodMap: Record<string, TopItem> = {}
 
-    misPedidosMes.forEach((p: any) => {
+    ;(data || []).forEach((p: any) => {
       const c = p.cliente as any
       const tc = c?.nombre || "Desconocida"
       if (!tiendaMap[tc]) tiendaMap[tc] = { nombre: tc, municipio: c?.municipio || "", total: 0, cantidad: 0 }
@@ -158,39 +201,9 @@ export default function DashboardPage() {
       })
     })
 
-    const diaMap: Record<string, number> = {}
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
-      diaMap[d] = 0
-    }
-    ;(pedidos30 || []).forEach((p: any) => {
-      const d = new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
-      if (d in diaMap) diaMap[d]++
-    })
-
-    const sort = <T extends TopItem>(m: Record<string, T>) =>
-      Object.values(m).sort((a, b) => b.total - a.total).slice(0, 5)
-
-    const sortedVend = sort(vendMap)
-    const miNombre   = session?.nombre || ""
-    const miRankingPos = sortedVend.findIndex(v => v.nombre === miNombre) + 1
-
-    setStats({
-      pedidosHoy: pedidosHoy || 0,
-      pedidosAyer: pedidosAyer || 0,
-      ventasMes,
-      tiendasActivas: tiendas || 0,
-      stockBajo: agotados.length + bajos.length,
-      tiendasVisitadas,
-      miRanking: miRankingPos,
-      promedioDiario,
-    })
-    setTopVendedores(sortedVend)
-    setTopTiendas(sort(tiendaMap as any) as any)
-    setTopProductos(sort(prodMap))
-    setDiasData(Object.entries(diaMap).map(([dia, pedidos]) => ({ dia: dia.slice(5), pedidos })))
-    setRecientes(recientesRaw || [])
-    setLoading(false)
+    setTopTiendas(sortTop(tiendaMap))
+    setTopProductos(sortTop(prodMap))
+    setLoadingTops(false)
   }
 
   const isAdmin = user?.perfil?.nombre === "Administrador"
@@ -245,36 +258,6 @@ export default function DashboardPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-      {/* Alerta de stock */}
-      {!alertaCerrada && (alertaStock.agotados.length > 0 || alertaStock.bajos.length > 0) && (
-        <div style={{
-          background: alertaStock.agotados.length > 0 ? "rgba(215,38,56,0.08)" : "rgba(245,158,11,0.08)",
-          border: `1px solid ${alertaStock.agotados.length > 0 ? "rgba(215,38,56,0.3)" : "rgba(245,158,11,0.3)"}`,
-          borderRadius: "12px", padding: "16px 20px",
-        }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: "14px", fontWeight: 700, margin: "0 0 10px", color: alertaStock.agotados.length > 0 ? "#D72638" : "#d97706" }}>
-                {alertaStock.agotados.length > 0 ? "Productos agotados y con stock bajo" : "Productos con stock bajo"}
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                {alertaStock.agotados.map((p: any) => (
-                  <span key={p.id} style={{ padding: "4px 10px", background: "rgba(215,38,56,0.12)", color: "#D72638", borderRadius: "99px", fontSize: "12px", fontWeight: 600 }}>
-                    {p.nombre} — AGOTADO
-                  </span>
-                ))}
-                {alertaStock.bajos.map((p: any) => (
-                  <span key={p.id} style={{ padding: "4px 10px", background: "rgba(245,158,11,0.12)", color: "#d97706", borderRadius: "99px", fontSize: "12px", fontWeight: 600 }}>
-                    {p.nombre} — {p.stock} uds.
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button onClick={() => setAlertaCerrada(true)} style={{ background: "none", border: "none", cursor: "pointer", color: theme.muted, fontSize: "18px", padding: "0", flexShrink: 0, lineHeight: 1 }}>✕</button>
-          </div>
-        </div>
-      )}
 
       {/* Saludo */}
       <div>
@@ -370,16 +353,16 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 4ta tarjeta: admin → stock bajo | vendedor → mi puesto */}
+        {/* 4ta tarjeta: admin → productos agotados | vendedor → mi puesto */}
         {isAdmin ? (
-          <div style={{ ...card, border: stats.stockBajo > 0 ? "1px solid rgba(215,38,56,0.4)" : `1px solid ${theme.border}` }}>
+          <div style={{ ...card, border: stats.agotados > 0 ? "1px solid rgba(215,38,56,0.4)" : `1px solid ${theme.border}` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-              <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>Stock bajo</p>
-              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: stats.stockBajo > 0 ? "rgba(215,38,56,0.12)" : "rgba(245,158,11,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}><Ico name="alert" /></div>
+              <p style={{ fontSize: "12px", fontWeight: 600, color: theme.muted, textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>Agotados</p>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: stats.agotados > 0 ? "rgba(215,38,56,0.12)" : "rgba(245,158,11,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}><Ico name="alert" /></div>
             </div>
-            <p style={{ fontSize: "32px", fontWeight: "bold", margin: "0 0 6px", color: stats.stockBajo > 0 ? "#D72638" : theme.text }}>{stats.stockBajo}</p>
-            <p style={{ fontSize: "12px", margin: 0, color: stats.stockBajo > 0 ? "#D72638" : theme.muted, fontWeight: stats.stockBajo > 0 ? 600 : 400 }}>
-              {stats.stockBajo > 0 ? "¡Requiere atención!" : "Todo en orden"}
+            <p style={{ fontSize: "32px", fontWeight: "bold", margin: "0 0 6px", color: stats.agotados > 0 ? "#D72638" : theme.text }}>{stats.agotados}</p>
+            <p style={{ fontSize: "12px", margin: 0, color: stats.agotados > 0 ? "#D72638" : theme.muted, fontWeight: stats.agotados > 0 ? 600 : 400 }}>
+              {stats.agotados > 0 ? "¡Requiere atención!" : "Todo en orden"}
             </p>
           </div>
         ) : (
@@ -472,7 +455,9 @@ export default function DashboardPage() {
         {/* Top productos */}
         <div style={card}>
           <p style={sectionTitle}>{isAdmin ? "Top productos del mes" : "Mis top productos"}</p>
-          {topProductos.length === 0 ? (
+          {loadingTops ? (
+            <p style={{ color: theme.muted, fontSize: "13px" }}>Cargando...</p>
+          ) : topProductos.length === 0 ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin datos este mes</p>
           ) : (
             <>
@@ -500,7 +485,9 @@ export default function DashboardPage() {
         {/* Top tiendas */}
         <div style={card}>
           <p style={sectionTitle}>{isAdmin ? "Top tiendas del mes" : "Mis top tiendas"}</p>
-          {topTiendas.length === 0 ? (
+          {loadingTops ? (
+            <p style={{ color: theme.muted, fontSize: "13px" }}>Cargando...</p>
+          ) : topTiendas.length === 0 ? (
             <p style={{ color: theme.muted, fontSize: "13px" }}>Sin datos</p>
           ) : (
             <div style={{ display: "grid", gap: "10px" }}>

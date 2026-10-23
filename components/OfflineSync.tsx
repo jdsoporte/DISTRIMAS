@@ -2,7 +2,23 @@
 import { useEffect, useState } from "react"
 import { getSession } from "@/lib/auth"
 import { descargarParaOffline, enviarPendientes } from "@/lib/offline-sync"
-import { contarPendientes } from "@/lib/offline-db"
+import { contarPendientes, leerDato } from "@/lib/offline-db"
+
+// Cada cuánto se vuelve a bajar el catálogo completo para uso sin señal
+const VIGENCIA_MS = 15 * 60 * 1000
+// Espera antes de sincronizar, para que la pantalla cargue primero
+const ESPERA_INICIAL_MS = 3000
+
+async function syncVencida(userId: string): Promise<boolean> {
+  const ultima = await leerDato<string>("ultima_sync")
+  if (!ultima) return true
+  // Si en este celular entró otro usuario, sus datos (ruta, clientes) no sirven
+  if ((await leerDato<string>("sync_usuario")) !== userId) return true
+  // La ruta guardada es la del día: si cambió el día, se vuelve a bajar
+  const dia = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
+  if (dia(new Date(ultima)) !== dia(new Date())) return true
+  return Date.now() - new Date(ultima).getTime() > VIGENCIA_MS
+}
 
 type Estado = "ok" | "offline" | "sync" | "listo"
 
@@ -14,7 +30,7 @@ export default function OfflineSync() {
   useEffect(() => {
     let activo = true
 
-    async function sincronizar() {
+    async function sincronizar(forzar = false) {
       const user = getSession()
       if (!user?.id) return
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
@@ -22,10 +38,17 @@ export default function OfflineSync() {
         actualizarPendientes()
         return
       }
-      if (activo) { setEstado("sync"); setVisible(true) }
       // 1) Enviar lo que quedó pendiente sin señal
       const enviados = await enviarPendientes()
-      // 2) Refrescar los datos guardados
+      // 2) Refrescar los datos guardados: solo vendedores (el admin no trabaja sin señal)
+      //    y solo si la última descarga ya tiene más de 15 minutos
+      const esAdmin = user.perfil?.nombre === "Administrador"
+      if (esAdmin || !(forzar || await syncVencida(user.id))) {
+        if (activo) { setEstado("ok"); setVisible(false) }
+        actualizarPendientes()
+        return
+      }
+      if (activo) { setEstado("sync"); setVisible(true) }
       const ok = await descargarParaOffline(user.id)
       if (!activo) return
       setEstado(ok ? "listo" : "ok")
@@ -42,14 +65,15 @@ export default function OfflineSync() {
       if (activo) setPendientes(n)
     }
 
-    function alConectar() { setEstado("sync"); setVisible(true); sincronizar() }
+    function alConectar() { sincronizar(true) }
     function alDesconectar() { setEstado("offline"); setVisible(true) }
 
-    sincronizar()
+    const espera = setTimeout(() => sincronizar(), ESPERA_INICIAL_MS)
     window.addEventListener("online", alConectar)
     window.addEventListener("offline", alDesconectar)
     return () => {
       activo = false
+      clearTimeout(espera)
       window.removeEventListener("online", alConectar)
       window.removeEventListener("offline", alDesconectar)
     }
