@@ -87,7 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "20px 16px", borderBottom: `1px solid ${theme.border}` }}>
         <div style={{ width: "36px", height: "36px", borderRadius: "9px", background: "#fff", overflow: "hidden", flexShrink: 0, border: "1px solid rgba(215,38,56,0.2)" }}>
-          <img src="https://zwilxcrbukksmwuqkfay.supabase.co/storage/v1/object/public/imagenes/logo.png" alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          <img src="/logo.png" alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         </div>
         <div>
           <p style={{ fontWeight: "bold", fontSize: "14px", margin: 0, color: theme.text }}>Distrimas SC</p>

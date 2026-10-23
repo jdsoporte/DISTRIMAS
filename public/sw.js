@@ -3,7 +3,7 @@
 // NO cachea las llamadas a Supabase: los datos siempre van a la red,
 // para no mostrar informacion vieja o falsa.
 
-const CACHE = "distrimas-v1"
+const CACHE = "distrimas-v2"
 const APP_SHELL = ["/", "/manifest.webmanifest"]
 
 self.addEventListener("install", (e) => {
@@ -26,8 +26,8 @@ self.addEventListener("fetch", (e) => {
 
   if (request.method !== "GET") return
 
-  // Supabase y autenticacion: siempre a la red, nunca cache
-  if (url.hostname.includes("supabase.co") || url.pathname.startsWith("/auth")) return
+  // Datos (Supabase o /rest/ en Dokploy) y autenticacion: siempre a la red, nunca cache
+  if (url.hostname.includes("supabase.co") || url.pathname.startsWith("/auth") || url.pathname.startsWith("/rest/")) return
 
   // Assets estaticos (JS, CSS, imagenes, fuentes): cache primero
   const esEstatico =

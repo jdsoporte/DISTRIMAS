@@ -1,19 +1,18 @@
 ﻿import { supabase } from './supabase'
 import { Usuario, AccionesModulo } from './types'
 
+// Columnas de usuarios que se pueden leer desde el navegador (password_hash no).
+// Para TypeScript se declara como el select original, asi el tipo del resultado no cambia.
+export const USUARIO_SELECT = 'id, nombre, documento, telefono, usuario, perfil_id, activo, primer_ingreso, created_at, perfil:perfiles(*)' as unknown as '*, perfil:perfiles(*)'
+
 export async function login(usuario: string, password: string): Promise<{ data: Usuario | null, error: string | null }> {
-  const { data, error } = await supabase
-    .from('usuarios')
-    .select('*, perfil:perfiles(*)')
-    .eq('usuario', usuario)
-    .eq('activo', true)
-    .single()
+  // La contrasena se valida en la base (funcion login, bcrypt); nunca se descarga
+  const { data, error } = await supabase.rpc('login', { p_usuario: usuario, p_password: password })
 
   if (error || !data) return { data: null, error: 'Usuario o contrasena incorrectos' }
-  if (data.password_hash !== password) return { data: null, error: 'Usuario o contrasena incorrectos' }
 
   localStorage.setItem('distrimas_user', JSON.stringify(data))
-  return { data, error: null }
+  return { data: data as Usuario, error: null }
 }
 
 export function getSession(): Usuario | null {

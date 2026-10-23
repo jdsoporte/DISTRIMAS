@@ -41,16 +41,13 @@ export default function InventarioPage() {
 
   useEffect(() => {
     load()
-    let t: ReturnType<typeof setTimeout> | undefined
-    const recargarAgrupado = () => { if (t) clearTimeout(t); t = setTimeout(load, 800) }
-    const canal = supabase.channel("inventario-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, recargarAgrupado)
-      .subscribe()
-    return () => { if (t) clearTimeout(t); supabase.removeChannel(canal) }
+    // Sin servidor Realtime: la lista se recarga en silencio cada 30 s
+    const intervalo = setInterval(() => load(true), 30000)
+    return () => clearInterval(intervalo)
   }, [])
 
-  async function load() {
-    setLoading(true)
+  async function load(silencioso = false) {
+    if (!silencioso) setLoading(true)
     const TAM = 1000
     let desde = 0
     let todos: Producto[] = []
@@ -58,9 +55,12 @@ export default function InventarioPage() {
       const { data, error } = await supabase
         .from("productos").select("*").order("nombre")
         .range(desde, desde + TAM - 1)
-      if (error || !data || data.length === 0) break
+      if (error || !data || data.length === 0) {
+        if (error && silencioso) return // si falla la recarga, se deja la lista que ya estaba
+        break
+      }
       todos = todos.concat(data)
-      setProductos([...todos]) // mostramos lo que va llegando
+      if (!silencioso) setProductos([...todos]) // mostramos lo que va llegando
       setLoading(false)        // quitamos "Cargando" apenas llega el primer bloque
       if (data.length < TAM) break
       desde += TAM

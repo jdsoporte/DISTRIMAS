@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next"
 
-const LOGO = "https://zwilxcrbukksmwuqkfay.supabase.co/storage/v1/object/public/imagenes/logo.png"
+const LOGO = "/logo.png"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

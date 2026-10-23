@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
 
-const LOGO = 'https://zwilxcrbukksmwuqkfay.supabase.co/storage/v1/object/public/imagenes/logo.png'
+const LOGO = '/logo.png'
 
 export const metadata: Metadata = {
   title: 'Distrimas SC',

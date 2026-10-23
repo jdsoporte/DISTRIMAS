@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [error, setError]       = useState("")
   const [loading, setLoading]   = useState(false)
   const [verPass, setVerPass]   = useState(false)
-  const LOGO_URL = "https://zwilxcrbukksmwuqkfay.supabase.co/storage/v1/object/public/imagenes/logo.png"
+  const LOGO_URL = "/logo.png"
   const [logoUrl, setLogoUrl]     = useState(LOGO_URL)
   const [logoOk, setLogoOk]       = useState(true)
 

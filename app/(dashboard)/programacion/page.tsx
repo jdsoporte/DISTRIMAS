@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { USUARIO_SELECT } from "@/lib/auth"
 import { Usuario, Ruta, AsignacionRuta } from "@/lib/types"
 import { useTheme } from "@/lib/theme-context"
 
@@ -32,7 +33,7 @@ export default function ProgramacionPage() {
   async function load() {
     setLoading(true); setError("")
     const [u, r, a] = await Promise.all([
-      supabase.from("usuarios").select("*, perfil:perfiles(*)").eq("activo", true).order("nombre"),
+      supabase.from("usuarios").select(USUARIO_SELECT).eq("activo", true).order("nombre"),
       supabase.from("rutas").select("*").eq("activo", true).order("nombre"),
       supabase.from("asignaciones_ruta").select("*"),
     ])

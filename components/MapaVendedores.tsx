@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { USUARIO_SELECT } from "@/lib/auth"
 import { useTheme } from "@/lib/theme-context"
 
 // Coordenadas aproximadas de los municipios de Córdoba (y algunos vecinos)
@@ -79,7 +80,7 @@ export default function MapaVendedores() {
     const quincenaHoy = ahoraCol.getDate() <= 15 ? 1 : 2
 
     const [u, a] = await Promise.all([
-      supabase.from("usuarios").select("*, perfil:perfiles(*)").eq("activo", true).order("nombre"),
+      supabase.from("usuarios").select(USUARIO_SELECT).eq("activo", true).order("nombre"),
       supabase.from("asignaciones_ruta").select("usuario_id, descanso, ruta:rutas(nombre)").eq("dia_semana", diaCol).eq("quincena", quincenaHoy),
     ])
     const vendedores = (u.data || []).filter(x => (x.perfil?.nombre || "").toLowerCase() !== "administrador")
