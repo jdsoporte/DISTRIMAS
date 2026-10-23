@@ -60,19 +60,21 @@ export default function ReporteVisitas() {
     const ini = desde + "T00:00:00-05:00"
     const fin = hasta + "T23:59:59-05:00"
 
-    // Visitas registradas en el rango (no compró + no visitado)
-    const visitas = await traerTodo(
-      "visitas",
-      "usuario_id, cliente_id, fecha, resultado, usuario:usuarios(nombre)",
-      (q) => q.gte("fecha", desde).lte("fecha", hasta)
-    )
-
-    // Pedidos confirmados/entregados en el rango (de aquí sale "compró")
-    const pedidos = await traerTodo(
-      "pedidos",
-      "usuario_id, cliente_id, created_at, usuario:usuarios(nombre)",
-      (q) => q.in("estado", ["confirmado", "entregado"]).gte("created_at", ini).lte("created_at", fin)
-    )
+    // Las dos consultas salen al mismo tiempo (antes una esperaba a la otra)
+    const [visitas, pedidos] = await Promise.all([
+      // Visitas registradas en el rango (no compró + no visitado)
+      traerTodo(
+        "visitas",
+        "usuario_id, cliente_id, fecha, resultado, usuario:usuarios(nombre)",
+        (q) => q.gte("fecha", desde).lte("fecha", hasta)
+      ),
+      // Pedidos confirmados/entregados en el rango (de aquí sale "compró")
+      traerTodo(
+        "pedidos",
+        "usuario_id, cliente_id, created_at, usuario:usuarios(nombre)",
+        (q) => q.in("estado", ["confirmado", "entregado"]).gte("created_at", ini).lte("created_at", fin)
+      ),
+    ])
 
     const mapa: Record<string, FilaVendedor> = {}
     const get = (uid: string, nombre: string) => {

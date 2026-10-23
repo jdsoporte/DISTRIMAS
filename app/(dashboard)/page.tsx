@@ -47,9 +47,6 @@ interface Stats {
   promedioDiario: number
 }
 
-const sortTop = <T extends TopItem>(m: Record<string, T>) =>
-  Object.values(m).sort((a, b) => b.total - a.total).slice(0, 5)
-
 export default function DashboardPage() {
   const theme = useTheme()
   const [user, setUser]                   = useState<Usuario | null>(null)
@@ -71,139 +68,52 @@ export default function DashboardPage() {
 
   async function loadAll(session: Usuario | null) {
     setLoading(true)
-    const col = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
-    const hoy       = col(new Date()) + "T00:00:00-05:00"
-    const manana    = col(new Date(Date.now() + 86400000)) + "T00:00:00-05:00"
-    const ayer      = col(new Date(Date.now() - 86400000)) + "T00:00:00-05:00"
-    const inicioMes = col(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) + "T00:00:00-05:00"
-    const hace30    = col(new Date(Date.now() - 30 * 86400000)) + "T00:00:00-05:00"
+    setLoadingTops(true)
 
-    const isAdmin = session?.perfil?.nombre === "Administrador"
-    const uid = session?.id
+    // Todo el dashboard en UN solo viaje al servidor (función dashboard_resumen en la base).
+    // Ver dokploy/02_dashboard_resumen.sql
+    const { data, error } = await supabase.rpc("dashboard_resumen", { p_usuario_id: session?.id ?? null })
+    const r: any = error ? {} : (data || {})
+    if (error) console.error("dashboard_resumen", error)
 
-    let qHoy = supabase.from("pedidos").select("id", { count: "exact", head: true }).gte("created_at", hoy).lt("created_at", manana)
-    let qAyer = supabase.from("pedidos").select("id", { count: "exact", head: true }).gte("created_at", ayer).lt("created_at", hoy)
-    let q30   = supabase.from("pedidos").select("created_at").gte("created_at", hace30).neq("estado", "cancelado")
-    let qRec  = supabase.from("pedidos").select("id, total, estado, created_at, cliente:clientes(nombre), usuario:usuarios(nombre)").order("created_at", { ascending: false }).limit(5)
+    const num = (v: any) => Number(v) || 0
+    const tops = (l: any[] | undefined) => (l || []).map((t: any) => ({ ...t, total: num(t.total), cantidad: num(t.cantidad) }))
 
-    if (!isAdmin && uid) {
-      qHoy = qHoy.eq("usuario_id", uid)
-      qAyer = qAyer.eq("usuario_id", uid)
-      q30   = q30.eq("usuario_id", uid)
-      qRec  = qRec.eq("usuario_id", uid)
-    }
-
-    // Primera tanda: solo datos livianos para pintar las tarjetas rápido
-    const [
-      { count: pedidosHoy },
-      { count: pedidosAyer },
-      { data: pedidosMes },
-      { count: tiendas },
-      { count: agotados },
-      { data: pedidos30 },
-      { data: recientesRaw },
-      { data: ofertasRaw },
-    ] = await Promise.all([
-      qHoy,
-      qAyer,
-      supabase.from("pedidos")
-        .select("total, usuario_id, cliente_id, usuario:usuarios(nombre)")
-        .gte("created_at", inicioMes)
-        .neq("estado", "cancelado"),
-      supabase.from("clientes").select("id", { count: "exact", head: true }).eq("activo", true),
-      isAdmin
-        ? supabase.from("productos").select("id", { count: "exact", head: true }).eq("activo", true).lte("stock", 0)
-        : Promise.resolve({ count: 0 }),
-      q30,
-      qRec,
-      isAdmin
-        ? Promise.resolve({ data: [] })
-        : supabase.from("productos").select("id,codigo,nombre,precio").eq("activo", true).eq("oferta", true).order("nombre"),
-    ])
-
-    setOfertas(ofertasRaw || [])
-
-    const allPedidosMes = pedidosMes || []
-    const misPedidosMes = isAdmin ? allPedidosMes : allPedidosMes.filter((p: any) => p.usuario_id === uid)
-
-    const ventasMes      = misPedidosMes.reduce((a: number, p: any) => a + (p.total || 0), 0)
-    const tiendasVisitadas = new Set(misPedidosMes.map((p: any) => p.cliente_id).filter(Boolean)).size
+    const ventasMes      = num(r.ventas_mes)
     const diaDelMes      = new Date().getDate()
     const promedioDiario = Math.round(ventasMes / Math.max(1, diaDelMes))
 
-    // Top vendedores siempre del mes completo (para ranking)
-    const vendMap: Record<string, TopItem> = {}
-    allPedidosMes.forEach((p: any) => {
-      const nombre = (p.usuario as any)?.nombre || "Desconocido"
-      if (!vendMap[nombre]) vendMap[nombre] = { nombre, total: 0, cantidad: 0 }
-      vendMap[nombre].total    += p.total || 0
-      vendMap[nombre].cantidad += 1
-    })
+    const sortedVend: TopItem[] = tops(r.top_vendedores)
+    const miNombre   = session?.nombre || ""
+    const miRankingPos = sortedVend.findIndex(v => v.nombre === miNombre) + 1
 
     const diaMap: Record<string, number> = {}
     for (let i = 29; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
       diaMap[d] = 0
     }
-    ;(pedidos30 || []).forEach((p: any) => {
-      const d = new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
-      if (d in diaMap) diaMap[d]++
+    ;(r.pedidos_30 || []).forEach((p: any) => {
+      if (p.dia in diaMap) diaMap[p.dia] = num(p.pedidos)
     })
 
-    const sortedVend = sortTop(vendMap)
-    const miNombre   = session?.nombre || ""
-    const miRankingPos = sortedVend.findIndex(v => v.nombre === miNombre) + 1
-
+    setOfertas(r.ofertas || [])
     setStats({
-      pedidosHoy: pedidosHoy || 0,
-      pedidosAyer: pedidosAyer || 0,
+      pedidosHoy: num(r.pedidos_hoy),
+      pedidosAyer: num(r.pedidos_ayer),
       ventasMes,
-      tiendasActivas: tiendas || 0,
-      agotados: agotados || 0,
-      tiendasVisitadas,
+      tiendasActivas: num(r.tiendas_activas),
+      agotados: num(r.agotados),
+      tiendasVisitadas: num(r.tiendas_visitadas),
       miRanking: miRankingPos,
       promedioDiario,
     })
     setTopVendedores(sortedVend)
     setDiasData(Object.entries(diaMap).map(([dia, pedidos]) => ({ dia: dia.slice(5), pedidos })))
-    setRecientes(recientesRaw || [])
-    setLoading(false)
-
-    // Segunda tanda (en segundo plano): detalle de productos y tiendas del mes.
-    // El vendedor solo trae sus propios pedidos, no los de todo el equipo.
-    loadTops(inicioMes, isAdmin, uid)
-  }
-
-  async function loadTops(inicioMes: string, isAdmin: boolean, uid?: string) {
-    setLoadingTops(true)
-    let q = supabase.from("pedidos")
-      .select("total, cliente:clientes(nombre, municipio), items:pedido_items(cantidad, precio_unitario, producto:productos(nombre))")
-      .gte("created_at", inicioMes)
-      .neq("estado", "cancelado")
-    if (!isAdmin && uid) q = q.eq("usuario_id", uid)
-    const { data } = await q
-
-    const tiendaMap: Record<string, TopItem & { municipio: string }> = {}
-    const prodMap: Record<string, TopItem> = {}
-
-    ;(data || []).forEach((p: any) => {
-      const c = p.cliente as any
-      const tc = c?.nombre || "Desconocida"
-      if (!tiendaMap[tc]) tiendaMap[tc] = { nombre: tc, municipio: c?.municipio || "", total: 0, cantidad: 0 }
-      tiendaMap[tc].total    += p.total || 0
-      tiendaMap[tc].cantidad += 1
-
-      ;(p.items || []).forEach((item: any) => {
-        const pn = item.producto?.nombre || "Desconocido"
-        if (!prodMap[pn]) prodMap[pn] = { nombre: pn, total: 0, cantidad: 0 }
-        prodMap[pn].total    += item.cantidad * item.precio_unitario
-        prodMap[pn].cantidad += item.cantidad
-      })
-    })
-
-    setTopTiendas(sortTop(tiendaMap))
-    setTopProductos(sortTop(prodMap))
+    setRecientes((r.recientes || []).map((p: any) => ({ ...p, total: num(p.total) })))
+    setTopTiendas(tops(r.top_tiendas))
+    setTopProductos(tops(r.top_productos))
     setLoadingTops(false)
+    setLoading(false)
   }
 
   const isAdmin = user?.perfil?.nombre === "Administrador"
@@ -246,16 +156,8 @@ export default function DashboardPage() {
 
   const totalProd = topProductos.reduce((a, p) => a + p.total, 0) || 1
 
-  if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ width: "40px", height: "40px", borderRadius: "50%", border: `3px solid ${theme.border}`, borderTopColor: "#D72638", margin: "0 auto 12px", animation: "spin 0.8s linear infinite" }} />
-        <p style={{ color: theme.muted, fontSize: "14px" }}>Cargando dashboard...</p>
-      </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-    </div>
-  )
-
+  // Mientras llega el resumen, los paneles (ventas del día, visitas, mapa) ya se montan
+  // y cargan en paralelo. Cada bloque conserva su lugar para que React no los vuelva a montar.
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
@@ -272,8 +174,18 @@ export default function DashboardPage() {
       {/* Ventas del día (admin y vendedor) */}
       <HistorialDia />
 
+      {loading && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "30vh" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ width: "40px", height: "40px", borderRadius: "50%", border: `3px solid ${theme.border}`, borderTopColor: "#D72638", margin: "0 auto 12px", animation: "spin 0.8s linear infinite" }} />
+            <p style={{ color: theme.muted, fontSize: "14px" }}>Cargando dashboard...</p>
+          </div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
+      )}
+
       {/* Productos en oferta (visible para el vendedor) */}
-      {!isAdmin && ofertas.length > 0 && (
+      {!loading && !isAdmin && ofertas.length > 0 && (
         <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: "12px", padding: "18px", marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
             <span style={{ padding: "2px 8px", borderRadius: "5px", fontSize: "11px", fontWeight: 800, background: "#D72638", color: "white" }}>OFERTA</span>
@@ -294,7 +206,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── TARJETAS ── */}
-      <div className="cards-grid">
+      {!loading && <div className="cards-grid">
 
         {/* Pedidos hoy */}
         <div style={card}>
@@ -381,7 +293,7 @@ export default function DashboardPage() {
             </p>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Control de visitas por vendedor (solo admin) */}
       {isAdmin && <ReporteVisitas />}
@@ -390,7 +302,7 @@ export default function DashboardPage() {
       {isAdmin && <MapaVendedores />}
 
       {/* ── FILA MEDIA ── */}
-      <div className="dash-mid">
+      {!loading && <div className="dash-mid">
 
         {/* Bar chart — filtrado por vendedor */}
         <div style={card}>
@@ -447,10 +359,10 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ── FILA INFERIOR ── */}
-      <div className="dash-bot">
+      {!loading && <div className="dash-bot">
 
         {/* Top productos */}
         <div style={card}>
@@ -526,7 +438,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
     </div>
   )
