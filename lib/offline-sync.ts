@@ -61,6 +61,7 @@ export async function descargarParaOffline(userId: string): Promise<boolean> {
     await guardarDato("productos", productos)
     await guardarDato("config", config || null)
     await guardarDato("ultima_sync", new Date().toISOString())
+    await guardarDato("sync_usuario", userId)
 
     return true
   } catch {

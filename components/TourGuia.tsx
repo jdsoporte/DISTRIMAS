@@ -223,7 +223,7 @@ const TODOS_PASOS: PasoConfig[] = [
   {
     icono: "📊", rol: "todos",
     titulo: "Dashboard — Tu panel principal",
-    desc: "Al entrar verás pedidos del día, ventas del mes, clientes activos y alertas de stock bajo. También gráficos con los últimos 30 días.",
+    desc: "Al entrar verás pedidos del día, ventas del mes, clientes activos y productos agotados. También gráficos con los últimos 30 días.",
     ilustracion: <IluDashboard />,
   },
   {
@@ -253,7 +253,7 @@ const TODOS_PASOS: PasoConfig[] = [
   {
     icono: "📦", rol: "todos",
     titulo: "Inventario",
-    desc: "Consulta el stock de cada producto. Los amarillos tienen stock bajo. En el Dashboard aparece una alerta automática cuando un producto se agota.",
+    desc: "Consulta el stock de cada producto. Los amarillos tienen stock bajo. En el Dashboard verás cuántos productos están agotados.",
     ilustracion: <IluInventario />,
   },
   {

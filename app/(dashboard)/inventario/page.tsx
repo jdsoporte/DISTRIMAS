@@ -8,6 +8,9 @@ import * as XLSX from "xlsx"
 
 const EMPTY: Partial<Producto> = { codigo: "", nombre: "", descripcion: "", unidad: "Und", precio: 0, precio_t2: 0, precio_t3: 0, stock: 0, stock_minimo: 10, grupo: "", iva: 0, costo: 0, oferta: false, activo: true }
 
+// Filas que se dibujan a la vez (dibujar miles de golpe pone lento el celular)
+const POR_PAGINA = 100
+
 interface ImportResumen { nuevos: number; actualizados: number; errores: number; total: number; avisos: string[] }
 
 export default function InventarioPage() {
@@ -22,6 +25,7 @@ export default function InventarioPage() {
   const [error, setError] = useState("")
   const [buscar, setBuscar] = useState("")
   const [filtro, setFiltro] = useState<"todos" | "bajo" | "ok">("todos")
+  const [visibles, setVisibles] = useState(POR_PAGINA)
 
   // Import state
   const [archivoNombre, setArchivoNombre] = useState<string | null>(null)
@@ -41,8 +45,32 @@ export default function InventarioPage() {
 
   useEffect(() => {
     load()
+    // Los cambios en tiempo real se aplican solo al producto que cambió,
+    // sin volver a bajar todo el catálogo. Si llegan muchos de golpe
+    // (por ejemplo una importación), ahí sí se recarga completo.
     let t: ReturnType<typeof setTimeout> | undefined
-    const recargarAgrupado = () => { if (t) clearTimeout(t); t = setTimeout(load, 800) }
+    let cola: any[] = []
+    const aplicarCambios = () => {
+      const cambios = cola
+      cola = []
+      if (cambios.length > 50) { load(); return }
+      setProductos(prev => {
+        const lista = [...prev]
+        for (const c of cambios) {
+          if (c.eventType === "DELETE") {
+            const i = lista.findIndex(p => p.id === c.old?.id)
+            if (i >= 0) lista.splice(i, 1)
+            continue
+          }
+          const nuevo = c.new as Producto
+          const i = lista.findIndex(p => p.id === nuevo.id)
+          if (i >= 0) lista[i] = { ...lista[i], ...nuevo }
+          else lista.push(nuevo)
+        }
+        return lista.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""))
+      })
+    }
+    const recargarAgrupado = (cambio: any) => { cola.push(cambio); if (t) clearTimeout(t); t = setTimeout(aplicarCambios, 800) }
     const canal = supabase.channel("inventario-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, recargarAgrupado)
       .subscribe()
@@ -382,6 +410,8 @@ export default function InventarioPage() {
     return coincide
   })
 
+  useEffect(() => { setVisibles(POR_PAGINA) }, [buscar, filtro])
+
   const f = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }))
   const inp = { background: theme.cardAlt, border: `1.5px solid ${theme.border}`, borderRadius: "8px", color: theme.text, fontSize: "14px", padding: "10px 12px", outline: "none", width: "100%", boxSizing: "border-box" as const }
   const lbl = { display: "block", fontSize: "11px", fontWeight: "bold" as const, color: theme.muted, textTransform: "uppercase" as const, letterSpacing: "0.7px", marginBottom: "6px" }
@@ -589,7 +619,7 @@ export default function InventarioPage() {
                 <tr><td colSpan={13} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
                 <tr><td colSpan={13} style={{ padding: "40px", textAlign: "center", color: theme.muted }}>No hay productos</td></tr>
-              ) : filtrados.map(p => {
+              ) : filtrados.slice(0, visibles).map(p => {
                 const bajo = p.activo && p.stock < p.stock_minimo
                 return (
                   <tr key={p.id} style={{ borderBottom: `1px solid ${theme.border}`, background: bajo ? "rgba(245,158,11,0.04)" : "transparent" }}>
@@ -643,6 +673,12 @@ export default function InventarioPage() {
           </table>
         </div>
       </div>
+      {!loading && filtrados.length > visibles && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", marginTop: "12px" }}>
+          <p style={{ fontSize: "12px", color: theme.muted, margin: 0 }}>Mostrando {visibles} de {filtrados.length} productos</p>
+          <button onClick={() => setVisibles(v => v + POR_PAGINA)} style={{ padding: "8px 18px", background: theme.cardAlt, color: theme.text, fontSize: "13px", fontWeight: 600, borderRadius: "8px", border: `1px solid ${theme.border}`, cursor: "pointer" }}>Mostrar más</button>
+        </div>
+      )}
 
       {modal && (
         <div className="modal-overlay">
